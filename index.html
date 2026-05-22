@@ -1,23 +1,17 @@
----
-
-### The Code (index.html)
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TikTok Originality Metadata Purger</title>
-    <!-- Cross-Origin Isolation Helper for GitHub Pages -->
     <script src="coi-serviceworker.js"></script>
-    
+
     <style>
         :root {
             --bg-color: #121214;
             --card-bg: #1c1c1e;
-            --accent-color: #fe2c55; /* TikTok Red */
-            --accent-blue: #25f4ee;  /* TikTok Cyan */
+            --accent-color: #fe2c55;
+            --accent-blue: #25f4ee;
             --text-color: #f1f1f3;
             --text-muted: #a1a1aa;
         }
@@ -225,7 +219,7 @@
         </div>
     </div>
 
-    <button id="processBtn" class="btn-process" disabled>Load App System First...</button>
+    <button id="processBtn" class="btn-process" disabled>Loading video engine...</button>
 
     <div class="status-container" id="statusContainer">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -238,15 +232,12 @@
     </div>
 </div>
 
-<!-- Modern script type="module" integration for dynamic ffmpeg load -->
 <script type="module">
-    // Fetch stable dynamic versions of packages directly matching modern UMD bundles 
     import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/esm/index.js';
     import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js';
 
     const ffmpeg = new FFmpeg();
-    
-    // UI Elements
+
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
     const uploadText = document.getElementById('uploadText');
@@ -258,67 +249,84 @@
     const downloadLink = document.getElementById('downloadLink');
 
     let selectedFile = null;
+    let ffmpegReady = false;
 
-    // Load FFmpeg resources on setup
+    function updateProcessButton() {
+        if (!ffmpegReady) {
+            processBtn.disabled = true;
+            return;
+        }
+        if (selectedFile) {
+            processBtn.disabled = false;
+            processBtn.innerText = 'Purge & Transform Video';
+        } else {
+            processBtn.disabled = true;
+            processBtn.innerText = 'Select a video to process';
+        }
+    }
+
     async function initFFmpeg() {
+        statusContainer.style.display = 'block';
+        statusText.innerText = 'Downloading video engine (first visit may take a moment)...';
+
         try {
             const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
             await ffmpeg.load({
                 coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+                wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
             });
-            
-            processBtn.innerText = "Select a video to process";
-            statusText.innerText = "Engine ready.";
+
+            ffmpegReady = true;
+            statusText.innerText = 'Engine ready. Select a video to begin.';
+            updateProcessButton();
         } catch (error) {
             console.error(error);
-            statusText.innerText = "Isolation Error: Ensure service worker loaded correctly.";
-            processBtn.innerText = "System Failure";
+            ffmpegReady = false;
+            statusText.innerText = `Engine failed to load: ${error.message}. Try a hard refresh — cross-origin isolation is required.`;
+            processBtn.innerText = 'Engine unavailable';
+            processBtn.disabled = true;
         }
     }
 
-    // Handle Input Files
     fileInput.addEventListener('change', (e) => {
-        if(e.target.files.length > 0) handleFileSelection(e.target.files[0]);
+        if (e.target.files.length > 0) handleFileSelection(e.target.files[0]);
     });
 
-    // Drag over styling helpers
-    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent-blue)'; });
-    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#3a3a3c'; });
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = 'var(--accent-blue)';
+    });
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.style.borderColor = '#3a3a3c';
+    });
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.style.borderColor = '#3a3a3c';
-        if(e.dataTransfer.files.length > 0) handleFileSelection(e.dataTransfer.files[0]);
+        if (e.dataTransfer.files.length > 0) handleFileSelection(e.dataTransfer.files[0]);
     });
 
     function handleFileSelection(file) {
         selectedFile = file;
         uploadText.innerText = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
-        processBtn.disabled = false;
-        processBtn.innerText = "Purge & Transform Video";
         downloadBox.style.display = 'none';
+        updateProcessButton();
     }
 
-    // Processing Logic Loop
     processBtn.addEventListener('click', async () => {
-        if (!selectedFile) return;
+        if (!selectedFile || !ffmpegReady) return;
 
-        // Reset UI Viewports
         statusContainer.style.display = 'block';
         downloadBox.style.display = 'none';
         processBtn.disabled = true;
         progressFill.style.width = '0%';
 
-        // Track progress from execution loops
         ffmpeg.on('log', ({ message }) => {
             console.log(message);
-            // Rough match patterns to keep user updated via parsing standard ffmpeg text output
-            if(message.includes('frame=')) {
-                statusText.innerText = `Analyzing and adjusting pixels... \n${message.substring(0, 40)}`;
+            if (message.includes('frame=')) {
+                statusText.innerText = `Analyzing and adjusting pixels... ${message.substring(0, 40)}`;
             }
         });
 
-        // Capture internal timestamps to display percentage roughly
         ffmpeg.on('progress', ({ progress }) => {
             const pct = Math.min(Math.round(progress * 100), 99);
             progressFill.style.width = `${pct}%`;
@@ -326,28 +334,19 @@
         });
 
         try {
-            statusText.innerText = "Loading raw video timeline data...";
-            // Ingest video stream into virtual files system space
+            statusText.innerText = 'Loading raw video timeline data...';
             await ffmpeg.writeFile('input.mp4', await fetchFile(selectedFile));
 
-            // Parse structural alteration checkboxes
             const useZoom = document.getElementById('applyZoom').checked;
             const useColor = document.getElementById('applyColor').checked;
 
-            // Generate arguments arrays dynamically
-            let ffmpegArgs = ['-i', 'input.mp4'];
+            const ffmpegArgs = ['-i', 'input.mp4', '-map_metadata', '-1'];
 
-            // Strip global headers and metadata structures outright
-            ffmpegArgs.push('-map_metadata', '-1');
-
-            // Construct filters dynamically based on chosen uniqueness levels
-            let videoFilters = [];
+            const videoFilters = [];
             if (useZoom) {
-                // Scales image slightly above boundary scale and slices the outer boundary away
                 videoFilters.push('scale=1.01*iw:-1', 'crop=iw/1.01:ih/1.01');
             }
             if (useColor) {
-                // Tweak contrast and saturation down/up fractional indices to break hash frameworks
                 videoFilters.push('eq=contrast=1.005:saturation=1.01:brightness=0.002');
             }
 
@@ -355,34 +354,30 @@
                 ffmpegArgs.push('-vf', videoFilters.join(','));
             }
 
-            // Force a clean re-encode to completely disrupt metadata tracking across timelines
             ffmpegArgs.push('-c:v', 'libx264', '-crf', '22', '-preset', 'ultrafast', '-c:a', 'aac', 'output.mp4');
 
-            statusText.innerText = "Executing matrix overrides. Do not close tab...";
+            statusText.innerText = 'Executing matrix overrides. Do not close tab...';
             await ffmpeg.exec(ffmpegArgs);
 
-            statusText.innerText = "Reassembling final video file layers...";
+            statusText.innerText = 'Reassembling final video file layers...';
             const data = await ffmpeg.readFile('output.mp4');
 
-            // Package output to local binary data blob URLs
             const cleanBlob = new Blob([data.buffer], { type: 'video/mp4' });
             const downloadUrl = URL.createObjectURL(cleanBlob);
 
             progressFill.style.width = '100%';
-            statusText.innerText = "Complete! Video fingerprint updated.";
-            
+            statusText.innerText = 'Complete! Video fingerprint updated.';
+
             downloadLink.href = downloadUrl;
             downloadBox.style.display = 'block';
-
         } catch (err) {
             console.error(err);
-            statusText.innerText = `Process Failed: ${err.message || 'Check terminal configs.'}`;
+            statusText.innerText = `Process Failed: ${err.message || 'Unknown error.'}`;
         } finally {
-            processBtn.disabled = false;
+            updateProcessButton();
         }
     });
 
-    // Fire initialization sequence on start
     initFFmpeg();
 </script>
 </body>
