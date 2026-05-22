@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TikTok Originality Metadata Purger</title>
+    <title>TikTok Unique-Fi</title>
     <script src="coi-serviceworker.js"></script>
-
     <style>
         :root {
             --bg-color: #121214;
@@ -14,228 +13,124 @@
             --accent-blue: #25f4ee;
             --text-color: #f1f1f3;
             --text-muted: #a1a1aa;
+            --risk-low: #25f4ee;
+            --risk-med: #fbbf24;
+            --risk-high: #fe2c55;
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            background: var(--card-bg);
-            width: 100%;
-            max-width: 580px;
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            border: 1px solid #2a2a2e;
-        }
-
-        h1 {
-            font-size: 24px;
-            margin-bottom: 8px;
-            text-align: center;
-            background: linear-gradient(90deg, var(--accent-color), var(--accent-blue));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        p.subtitle {
-            color: var(--text-muted);
-            font-size: 14px;
-            text-align: center;
-            margin-bottom: 24px;
-        }
-
-        .upload-zone {
-            border: 2px dashed #3a3a3c;
-            border-radius: 12px;
-            padding: 40px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: border-color 0.3s;
-            margin-bottom: 20px;
-        }
-
-        .upload-zone:hover {
-            border-color: var(--accent-color);
-        }
-
-        .upload-zone input {
-            display: none;
-        }
-
-        .upload-icon {
-            font-size: 40px;
-            margin-bottom: 10px;
-        }
-
-        .tweak-panel {
-            background: #262629;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .tweak-panel h3 {
-            font-size: 14px;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-muted);
-        }
-
-        .checkbox-group {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-
-        .checkbox-label input {
-            accent-color: var(--accent-color);
-            width: 16px;
-            height: 16px;
-        }
-
-        button.btn-process {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            width: 100%;
-            padding: 14px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s, opacity 0.2s;
-        }
-
-        button.btn-process:hover {
-            background: #e12246;
-        }
-
-        button:disabled {
-            background: #3a3a3c;
-            color: var(--text-muted);
-            cursor: not-allowed;
-        }
-
-        .status-container {
-            margin-top: 20px;
-            display: none;
-        }
-
-        .progress-bar {
-            background: #262629;
-            height: 8px;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-
-        .progress-fill {
-            background: linear-gradient(90deg, var(--accent-blue), var(--accent-color));
-            width: 0%;
-            height: 100%;
-            transition: width 0.3s ease;
-        }
-
-        .status-text {
-            font-size: 13px;
-            color: var(--text-muted);
-            text-align: center;
-            word-break: break-all;
-        }
-
-        .download-box {
-            margin-top: 20px;
-            display: none;
-            text-align: center;
-        }
-
-        .btn-download {
-            display: inline-block;
-            background: var(--accent-blue);
-            color: #000;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: bold;
-            text-decoration: none;
-            transition: opacity 0.2s;
-        }
-
-        .btn-download:hover {
-            opacity: 0.9;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: var(--bg-color); color: var(--text-color); display: flex; justify-content: center; min-height: 100vh; padding: 20px; }
+        .container { background: var(--card-bg); width: 100%; max-width: 620px; border-radius: 16px; padding: 28px; box-shadow: 0 10px 30px rgba(0,0,0,.5); border: 1px solid #2a2a2e; }
+        h1 { font-size: 24px; margin-bottom: 8px; text-align: center; background: linear-gradient(90deg, var(--accent-color), var(--accent-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .subtitle { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 20px; line-height: 1.45; }
+        .upload-zone { border: 2px dashed #3a3a3c; border-radius: 12px; padding: 32px 16px; text-align: center; cursor: pointer; margin-bottom: 16px; transition: border-color .3s; }
+        .upload-zone:hover { border-color: var(--accent-color); }
+        .upload-zone input { display: none; }
+        .upload-icon { font-size: 36px; margin-bottom: 8px; }
+        .tweak-panel { background: #262629; padding: 14px; border-radius: 8px; margin-bottom: 14px; }
+        .tweak-panel h3 { font-size: 13px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+        .field-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .field { flex: 1; min-width: 140px; }
+        .field label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; }
+        .field select { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #3a3a3c; background: #1c1c1e; color: var(--text-color); font-size: 14px; }
+        .checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+        .checkbox-label { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+        .checkbox-label input { accent-color: var(--accent-color); width: 16px; height: 16px; }
+        .hint { margin-top: 10px; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        .btn-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        button { border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; padding: 12px 16px; transition: opacity .2s, background .2s; }
+        button:disabled { background: #3a3a3c !important; color: var(--text-muted) !important; cursor: not-allowed; }
+        .btn-process { flex: 1; min-width: 160px; background: var(--accent-color); color: #fff; }
+        .btn-process:hover:not(:disabled) { background: #e12246; }
+        .btn-check { background: #262629; color: var(--accent-blue); border: 1px solid #3a3a3c; min-width: 140px; }
+        .btn-check:hover:not(:disabled) { border-color: var(--accent-blue); }
+        .btn-retry { width: 100%; margin-top: 10px; background: #3a3a3c; color: #fff; display: none; }
+        .status-container { margin-top: 16px; display: none; }
+        .progress-bar { background: #262629; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+        .progress-fill { background: linear-gradient(90deg, var(--accent-blue), var(--accent-color)); width: 0%; height: 100%; transition: width .3s; }
+        .status-text { font-size: 13px; color: var(--text-muted); text-align: center; word-break: break-word; }
+        .checker-panel { margin-top: 16px; display: none; background: #262629; border-radius: 10px; padding: 16px; border: 1px solid #3a3a3c; }
+        .checker-panel h3 { font-size: 14px; margin-bottom: 12px; color: var(--text-muted); }
+        .score-ring { text-align: center; margin-bottom: 14px; }
+        .score-value { font-size: 42px; font-weight: 800; line-height: 1; }
+        .score-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .risk-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-top: 8px; }
+        .risk-low { background: rgba(37,244,238,.15); color: var(--risk-low); }
+        .risk-med { background: rgba(251,191,36,.15); color: var(--risk-med); }
+        .risk-high { background: rgba(254,44,85,.15); color: var(--risk-high); }
+        .metric-list { list-style: none; font-size: 13px; }
+        .metric-list li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #333; gap: 12px; }
+        .metric-list li:last-child { border-bottom: none; }
+        .metric-val { color: var(--text-muted); text-align: right; }
+        .checker-advice { margin-top: 12px; font-size: 13px; line-height: 1.45; padding: 10px; border-radius: 6px; background: #1c1c1e; }
+        .download-box { margin-top: 16px; display: none; text-align: center; }
+        .btn-download { display: inline-block; background: var(--accent-blue); color: #000; padding: 12px 24px; border-radius: 8px; font-weight: 700; text-decoration: none; }
     </style>
 </head>
 <body>
-
 <div class="container">
     <h1>TikTok Unique-Fi</h1>
-    <p class="subtitle">Breaks visual, audio, and file fingerprints — tuned for TikTok duplicate detection.</p>
+    <p class="subtitle">Stronger transforms, higher quality export, and a local duplicate-risk scan before you upload.</p>
 
-    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-zone" id="dropZone">
         <div class="upload-icon">🎬</div>
-        <div id="uploadText">Click or Drag & Drop MP4 Video</div>
-        <input type="file" id="fileInput" accept="video/mp4,video/quicktime">
+        <div id="uploadText">Click or drag MP4 / MOV video</div>
+        <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
     </div>
 
     <div class="tweak-panel">
-        <h3>Anti-Detection Layers</h3>
-        <div class="checkbox-group">
-            <label class="checkbox-label">
-                <input type="checkbox" id="wipeMeta" checked disabled>
-                Strip all metadata &amp; encoder fingerprints (forced)
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" id="applyVisual" checked>
-                Visual hash break (random crop, rotate, color, grain)
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" id="applyAudio" checked>
-                Audio fingerprint break (micro pitch + EQ shift)
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" id="applyTiming" checked>
-                Timeline nudge (imperceptible speed sync)
-            </label>
+        <h3>Transform strength</h3>
+        <div class="field-row">
+            <div class="field">
+                <label for="strengthSelect">Intensity</label>
+                <select id="strengthSelect">
+                    <option value="standard">Standard</option>
+                    <option value="strong" selected>Strong (recommended)</option>
+                    <option value="maximum">Maximum — strongest</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="qualitySelect">Export quality</label>
+                <select id="qualitySelect">
+                    <option value="high" selected>High (CRF 18)</option>
+                    <option value="balanced">Balanced (faster)</option>
+                </select>
+            </div>
         </div>
-        <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.4;">
-            Each run uses randomized values so outputs never share the same signature. Enable all layers for best results.
-        </p>
+        <div class="checkbox-group" style="margin-top:10px">
+            <label class="checkbox-label"><input type="checkbox" id="applyVisual" checked> Visual transforms</label>
+            <label class="checkbox-label"><input type="checkbox" id="applyAudio" checked> Audio transforms</label>
+            <label class="checkbox-label"><input type="checkbox" id="applyTiming" checked> Timeline nudge</label>
+            <label class="checkbox-label"><input type="checkbox" id="applyFlip"> Random horizontal flip (max only)</label>
+        </div>
+        <p class="hint">Maximum + High quality takes longer but changes more pixels and audio. The risk scanner runs automatically after export.</p>
     </div>
 
-    <button id="processBtn" class="btn-process" disabled>Loading video engine...</button>
+    <div class="btn-row">
+        <button id="processBtn" class="btn-process" disabled>Loading engine…</button>
+        <button id="checkBtn" class="btn-check" disabled>Scan risk</button>
+    </div>
 
     <div class="status-container" id="statusContainer">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-        <div class="status-text" id="statusText">Initializing components...</div>
+        <div class="status-text" id="statusText">Initializing…</div>
+    </div>
+
+    <div class="checker-panel" id="checkerPanel">
+        <h3>Duplicate risk estimate</h3>
+        <p class="hint" style="margin:0 0 12px">Simulates file, visual, and audio fingerprint checks — not TikTok’s real API, but useful as a guide.</p>
+        <div class="score-ring">
+            <div class="score-value" id="scoreValue">—</div>
+            <div class="score-label">Uniqueness score / 100</div>
+            <div class="risk-badge" id="riskBadge">—</div>
+        </div>
+        <ul class="metric-list" id="metricList"></ul>
+        <div class="checker-advice" id="checkerAdvice"></div>
+        <button id="retryMaxBtn" class="btn-retry">Re-transform with Maximum strength</button>
     </div>
 
     <div class="download-box" id="downloadBox">
-        <p style="margin-bottom: 12px; font-size: 14px; color: #25f4ee;">✓ Video signature successfully reconstructed!</p>
-        <a id="downloadLink" class="btn-download" href="#" download="cleaned_tiktok_video.mp4">Save Transformed Video</a>
+        <p style="margin-bottom:12px;font-size:14px;color:#25f4ee">Export ready</p>
+        <a id="downloadLink" class="btn-download" href="#" download="unique_tiktok_video.mp4">Download video</a>
     </div>
 </div>
 
@@ -243,90 +138,123 @@
     import { FFmpeg } from './classes.js';
 
     const ffmpeg = new FFmpeg();
+    const EVEN_SCALE = 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
+
+    let selectedFile = null;
+    let originalObjectUrl = null;
+    let outputObjectUrl = null;
+    let ffmpegReady = false;
+    let lastFfmpegLogs = [];
+    let lastStrength = 'strong';
+
+    const $ = (id) => document.getElementById(id);
 
     async function toBlobURL(url, mimeType) {
         const buf = await (await fetch(url)).arrayBuffer();
         return URL.createObjectURL(new Blob([buf], { type: mimeType }));
     }
 
-    const fileInput = document.getElementById('fileInput');
-    const dropZone = document.getElementById('dropZone');
-    const uploadText = document.getElementById('uploadText');
-    const processBtn = document.getElementById('processBtn');
-    const statusContainer = document.getElementById('statusContainer');
-    const progressFill = document.getElementById('progressFill');
-    const statusText = document.getElementById('statusText');
-    const downloadBox = document.getElementById('downloadBox');
-    const downloadLink = document.getElementById('downloadLink');
-
-    let selectedFile = null;
-    let ffmpegReady = false;
-    let lastFfmpegLogs = [];
-
     function formatErr(err) {
-        if (typeof err === 'string') return err;
-        if (err instanceof Error) return err.message;
-        if (err && typeof err === 'object') return err.message || JSON.stringify(err);
-        return String(err);
+        if (err == null) return 'No error details (check browser console).';
+        if (typeof err === 'string') return err || 'Empty error from FFmpeg.';
+        if (err instanceof Error) return err.message || err.toString();
+        if (typeof err === 'number') return `FFmpeg exit code ${err}`;
+        try { return JSON.stringify(err); } catch { return String(err); }
     }
 
-    /** Random micro-variations so every export has a unique fingerprint. */
-    function buildTransformProfile() {
+    function getLogErrorHint() {
+        const lines = lastFfmpegLogs.filter((l) => /error|invalid|failed|not found|cannot|unable/i.test(l));
+        return lines.slice(-4).join(' | ') || lastFfmpegLogs.slice(-4).join(' | ') || '';
+    }
+
+    function getEncodeSettings() {
+        const high = $('qualitySelect').value === 'high';
+        return high
+            ? { crf: '18', preset: 'fast', audioBitrate: '192k', sampleRate: '48000' }
+            : { crf: '20', preset: 'fast', audioBitrate: '160k', sampleRate: '44100' };
+    }
+
+    function buildTransformProfile(strength) {
         const sign = () => (Math.random() > 0.5 ? 1 : -1);
-        const cropPad = 4 + Math.floor(Math.random() * 5);
+        const tiers = {
+            standard: { cropBase: 5, cropRange: 4, scaleBase: 1.018, scaleRange: 0.015, pitchMax: 0.01, speedMax: 0.003, pad: 0 },
+            strong: { cropBase: 8, cropRange: 8, scaleBase: 1.028, scaleRange: 0.025, pitchMax: 0.02, speedMax: 0.006, pad: 4 },
+            maximum: { cropBase: 12, cropRange: 12, scaleBase: 1.04, scaleRange: 0.04, pitchMax: 0.03, speedMax: 0.01, pad: 8 },
+        };
+        const t = tiers[strength] || tiers.strong;
+        const cropPad = t.cropBase + Math.floor(Math.random() * t.cropRange);
         const cropX = Math.floor(Math.random() * cropPad);
         const cropY = Math.floor(Math.random() * cropPad);
-        const scale = 1.015 + Math.random() * 0.02;
-        const hue = sign() * (1.5 + Math.random() * 3);
-        const sat = 1 + sign() * (0.012 + Math.random() * 0.02);
-        const contrast = 1 + sign() * (0.008 + Math.random() * 0.015);
-        const brightness = sign() * (0.004 + Math.random() * 0.01);
-        const pitch = 1 + sign() * (0.006 + Math.random() * 0.01);
+        const scale = t.scaleBase + Math.random() * t.scaleRange;
+        const sat = 1 + sign() * (0.02 + Math.random() * 0.04);
+        const contrast = 1 + sign() * (0.015 + Math.random() * 0.03);
+        const brightness = sign() * (0.01 + Math.random() * 0.02);
+        const gamma = (0.95 + Math.random() * 0.1).toFixed(3);
+        const pitch = 1 + sign() * (0.008 + Math.random() * t.pitchMax);
         const tempo = 1 / pitch;
-        const speed = 1 + sign() * (0.0015 + Math.random() * 0.003);
-        const volume = (0.97 + Math.random() * 0.06).toFixed(3);
+        const speed = 1 + sign() * (0.002 + Math.random() * t.speedMax);
+        const volume = (0.94 + Math.random() * 0.1).toFixed(3);
+        const flip = strength === 'maximum' && $('applyFlip').checked && Math.random() > 0.5;
+        const fpsNudge = strength === 'maximum' ? (29.97 + Math.random() * 0.06).toFixed(3) : null;
         return {
-            cropPad, cropX, cropY, scale, hue, sat, contrast, brightness,
-            pitch, tempo, speed, volume,
+            cropPad, cropX, cropY, scale, sat, contrast, brightness, gamma,
+            pitch, tempo, speed, volume, flip, pad: t.pad, fpsNudge, strength,
         };
     }
 
-    /** Filters known to work in @ffmpeg/core WASM builds. */
-    function buildVideoFilters(profile, enabled, useTiming) {
-        if (!enabled) return [];
-        const f = [
-            `scale=iw*${profile.scale}:ih*${profile.scale}`,
-            `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
-            `eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`,
-            `hue=h=${profile.hue.toFixed(2)}`,
-        ];
-        if (useTiming) {
-            f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
+    function buildVideoFilters(profile, useVisual, useTiming) {
+        if (!useVisual) return [];
+        const f = [];
+        if (profile.flip) f.push('hflip');
+        if (profile.pad > 0) {
+            const p = profile.pad;
+            f.push(`pad=iw+${p * 2}:ih+${p * 2}:${p}:${p}:black`);
         }
+        f.push(`scale=iw*${profile.scale}:ih*${profile.scale}`);
+        f.push(`crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`);
+        f.push(`eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}:gamma=${profile.gamma}`);
+        if (profile.fpsNudge) f.push(`fps=${profile.fpsNudge}`);
+        if (useTiming) f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
+        f.push(EVEN_SCALE);
         return f;
     }
 
-    function buildAudioFilters(profile, enabled, useTiming) {
-        if (!enabled) return [];
+    function buildAudioFilters(profile, useAudio, useTiming) {
+        if (!useAudio) return [];
         let tempo = profile.tempo * (useTiming ? profile.speed : 1);
         tempo = Math.min(2, Math.max(0.5, tempo));
         const rate = Math.round(44100 * profile.pitch);
-        return [
+        const enc = getEncodeSettings();
+        const filters = [
             `asetrate=${rate}`,
-            'aresample=44100',
+            `aresample=${enc.sampleRate}`,
             `atempo=${tempo.toFixed(5)}`,
-            'highpass=f=40',
+            'highpass=f=35',
+            'lowpass=f=15000',
             `volume=${profile.volume}`,
         ];
+        if (profile.strength === 'maximum') {
+            filters.push('aecho=0.85:0.9:12:0.04');
+        }
+        return filters;
     }
 
     function buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters, includeAudio }) {
+        const enc = getEncodeSettings();
         const args = ['-i', inputName, '-map_metadata', '-1'];
-        if (videoFilters.length) args.push('-vf', videoFilters.join(','));
+        if (videoFilters.length) {
+            const vf = [...videoFilters];
+            if (!vf.includes(EVEN_SCALE)) vf.push(EVEN_SCALE);
+            args.push('-vf', vf.join(','));
+        }
         if (audioFilters.length) args.push('-af', audioFilters.join(','));
-        args.push('-c:v', 'libx264', '-crf', '22', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p');
+        args.push(
+            '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset,
+            '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.1',
+            '-movflags', '+faststart',
+        );
         if (includeAudio) {
-            args.push('-c:a', 'aac', '-b:a', '128k');
+            args.push('-c:a', 'aac', '-b:a', enc.audioBitrate, '-ar', enc.sampleRate);
         } else {
             args.push('-an');
         }
@@ -335,230 +263,400 @@
     }
 
     async function runFfmpeg(args) {
-        await ffmpeg.exec(args);
-    }
-
-    async function probeHasAudio(inputName) {
-        const logs = [];
-        const onLog = ({ message }) => logs.push(message);
-        ffmpeg.on('log', onLog);
-        try {
-            await ffmpeg.ffprobe(['-i', inputName]);
-        } catch (e) {
-            console.warn('ffprobe warning:', formatErr(e));
-        } finally {
-            ffmpeg.off('log', onLog);
+        const code = await ffmpeg.exec(args);
+        if (code !== 0) {
+            const hint = getLogErrorHint();
+            throw new Error(hint ? `Exit ${code}: ${hint}` : `FFmpeg failed (exit ${code})`);
         }
-        return logs.some((line) => /Audio:/i.test(line));
     }
 
     async function cleanupFiles(...names) {
         for (const name of names) {
-            try { await ffmpeg.deleteFile(name); } catch (_) { /* not present */ }
+            try { await ffmpeg.deleteFile(name); } catch (_) {}
         }
     }
 
-    function updateProcessButton() {
-        if (!ffmpegReady) {
-            processBtn.disabled = true;
-            return;
+    /* ——— Risk scanner (local perceptual / file / audio heuristics) ——— */
+
+    async function sha256Hex(buffer) {
+        const hash = await crypto.subtle.digest('SHA-256', buffer);
+        return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function computeDHash(imageData, width) {
+        const gray = [];
+        for (let y = 0; y < 9; y++) {
+            for (let x = 0; x < 8; x++) {
+                const i = (y * width + x) * 4;
+                gray.push(imageData[i] * 0.299 + imageData[i + 1] * 0.587 + imageData[i + 2] * 0.114);
+            }
         }
-        if (selectedFile) {
-            processBtn.disabled = false;
-            processBtn.innerText = 'Purge & Transform Video';
+        let bits = '';
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                const a = gray[y * 8 + x];
+                const b = gray[y * 8 + x + 1];
+                bits += a > b ? '1' : '0';
+            }
+        }
+        return bits;
+    }
+
+    function hammingSimilarity(h1, h2) {
+        if (!h1 || !h2 || h1.length !== h2.length) return 0;
+        let same = 0;
+        for (let i = 0; i < h1.length; i++) if (h1[i] === h2[i]) same++;
+        return (same / h1.length) * 100;
+    }
+
+    function loadVideoMeta(url) {
+        return new Promise((resolve, reject) => {
+            const v = document.createElement('video');
+            v.muted = true;
+            v.playsInline = true;
+            v.preload = 'auto';
+            v.onloadedmetadata = () => resolve(v);
+            v.onerror = () => reject(new Error('Could not load video for scan'));
+            v.src = url;
+        });
+    }
+
+    async function extractFrameHashes(videoUrl) {
+        const video = await loadVideoMeta(videoUrl);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const size = 32;
+        canvas.width = size;
+        canvas.height = size;
+        const positions = [0.08, 0.25, 0.42, 0.58, 0.75, 0.92];
+        const hashes = [];
+
+        for (const p of positions) {
+            const t = Math.min(Math.max(video.duration * p, 0.05), Math.max(video.duration - 0.1, 0.05));
+            await new Promise((res, rej) => {
+                video.onseeked = () => res();
+                video.onerror = () => rej(new Error('Seek failed'));
+                video.currentTime = t;
+            });
+            ctx.drawImage(video, 0, 0, size, size);
+            hashes.push(computeDHash(ctx.getImageData(0, 0, size, size).data, size));
+        }
+        video.src = '';
+        return hashes;
+    }
+
+    async function extractAudioEnvelope(videoUrl) {
+        try {
+            const res = await fetch(videoUrl);
+            const buf = await res.arrayBuffer();
+            const ctx = new AudioContext();
+            const audio = await ctx.decodeAudioData(buf.slice(0));
+            const ch = audio.getChannelData(0);
+            const buckets = 48;
+            const step = Math.floor(ch.length / buckets);
+            const env = [];
+            for (let i = 0; i < buckets; i++) {
+                let sum = 0;
+                const start = i * step;
+                for (let j = 0; j < step; j += 64) sum += Math.abs(ch[start + j] || 0);
+                env.push(sum / (step / 64 || 1));
+            }
+            ctx.close();
+            return env;
+        } catch {
+            return null;
+        }
+    }
+
+    function envelopeSimilarity(a, b) {
+        if (!a || !b || a.length !== b.length) return null;
+        const norm = (arr) => {
+            const m = Math.sqrt(arr.reduce((s, v) => s + v * v, 0)) || 1;
+            return arr.map((v) => v / m);
+        };
+        const na = norm(a);
+        const nb = norm(b);
+        let dot = 0;
+        for (let i = 0; i < na.length; i++) dot += na[i] * nb[i];
+        return Math.min(100, Math.max(0, dot * 100));
+    }
+
+    async function runRiskCheck(originalUrl, outputUrl, strength) {
+        statusText.innerText = 'Running duplicate-risk scan…';
+        const [origBuf, outBuf] = await Promise.all([
+            fetch(originalUrl).then((r) => r.arrayBuffer()),
+            fetch(outputUrl).then((r) => r.arrayBuffer()),
+        ]);
+
+        const origHash = await sha256Hex(origBuf);
+        const outHash = await sha256Hex(outBuf);
+        const fileHashChanged = origHash !== outHash;
+
+        const [origFrames, outFrames] = await Promise.all([
+            extractFrameHashes(originalUrl),
+            extractFrameHashes(outputUrl),
+        ]);
+
+        let visualSim = 0;
+        for (let i = 0; i < origFrames.length; i++) {
+            visualSim += hammingSimilarity(origFrames[i], outFrames[i]);
+        }
+        visualSim /= origFrames.length;
+
+        const [origAudio, outAudio] = await Promise.all([
+            extractAudioEnvelope(originalUrl),
+            extractAudioEnvelope(outputUrl),
+        ]);
+        const audioSim = envelopeSimilarity(origAudio, outAudio);
+
+        let uniqueness = 0;
+        if (fileHashChanged) uniqueness += 20;
+        uniqueness += Math.min(40, (100 - visualSim) * 0.45);
+        if (audioSim != null) uniqueness += Math.min(30, (100 - audioSim) * 0.35);
+        else uniqueness += 10;
+        if (strength === 'maximum') uniqueness += 12;
+        else if (strength === 'strong') uniqueness += 8;
+        else uniqueness += 4;
+        uniqueness = Math.round(Math.min(100, Math.max(0, uniqueness)));
+
+        let risk = 'high';
+        let riskClass = 'risk-high';
+        if (uniqueness >= 72) { risk = 'low'; riskClass = 'risk-low'; }
+        else if (uniqueness >= 50) { risk = 'medium'; riskClass = 'risk-med'; }
+
+        let advice;
+        if (uniqueness >= 72) {
+            advice = 'Looks sufficiently different for upload. Still add a unique caption, cover, and optional 1–2s intro you filmed yourself.';
+        } else if (uniqueness >= 50) {
+            advice = 'Borderline — TikTok may still match visual or audio fingerprints. Re-run with Maximum intensity + High quality, or edit more in CapCut (crop, text, voiceover).';
         } else {
-            processBtn.disabled = true;
-            processBtn.innerText = 'Select a video to process';
+            advice = 'High duplicate risk — transform more before uploading. Use Maximum strength, enable all layers, then scan again.';
+        }
+
+        return {
+            uniqueness, risk, riskClass, advice, fileHashChanged, visualSim,
+            audioSim, origHash: origHash.slice(0, 12), outHash: outHash.slice(0, 12),
+        };
+    }
+
+    function renderCheckerReport(report) {
+        $('checkerPanel').style.display = 'block';
+        $('scoreValue').textContent = report.uniqueness;
+        $('scoreValue').style.color = report.risk === 'low' ? 'var(--risk-low)' : report.risk === 'medium' ? 'var(--risk-med)' : 'var(--risk-high)';
+        const badge = $('riskBadge');
+        badge.textContent = `${report.risk} risk`;
+        badge.className = `risk-badge ${report.riskClass}`;
+        $('metricList').innerHTML = `
+            <li><span>File hash</span><span class="metric-val">${report.fileHashChanged ? 'Changed ✓' : 'Unchanged ✗'}</span></li>
+            <li><span>Visual similarity</span><span class="metric-val">${report.visualSim.toFixed(1)}% (lower is better)</span></li>
+            <li><span>Audio similarity</span><span class="metric-val">${report.audioSim != null ? report.audioSim.toFixed(1) + '%' : 'N/A'}</span></li>
+            <li><span>Strength used</span><span class="metric-val">${lastStrength}</span></li>
+        `;
+        $('checkerAdvice').textContent = report.advice;
+        $('retryMaxBtn').style.display = report.uniqueness < 72 ? 'block' : 'none';
+    }
+
+    async function processVideo(forceStrength) {
+        const strength = forceStrength || $('strengthSelect').value;
+        lastStrength = strength;
+        const profile = buildTransformProfile(strength);
+        const useVisual = $('applyVisual').checked;
+        const useAudio = $('applyAudio').checked;
+        const useTiming = $('applyTiming').checked;
+        const ext = (selectedFile.name.split('.').pop() || 'mp4').toLowerCase();
+        const inputName = `input.${ext}`;
+
+        await cleanupFiles(inputName, 'output.mp4');
+        await ffmpeg.writeFile(inputName, new Uint8Array(await selectedFile.arrayBuffer()));
+
+        const videoFilters = buildVideoFilters(profile, useVisual, useTiming);
+        const audioFilters = buildAudioFilters(profile, useAudio, useTiming);
+        const videoNoTiming = videoFilters.filter((f) => !f.startsWith('setpts=') && !f.startsWith('fps='));
+        const enc = getEncodeSettings();
+
+        const attempts = [
+            {
+                label: 'full',
+                args: buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters, includeAudio: true }),
+            },
+            {
+                label: 'no-echo',
+                args: buildFfmpegArgs(inputName, profile, {
+                    videoFilters: videoNoTiming,
+                    audioFilters: buildAudioFilters({ ...profile, strength: 'strong' }, useAudio, useTiming),
+                    includeAudio: true,
+                }),
+            },
+            {
+                label: 'no-fps',
+                args: buildFfmpegArgs(inputName, profile, {
+                    videoFilters: videoNoTiming,
+                    audioFilters: buildAudioFilters({ ...profile, strength: 'strong' }, useAudio, useTiming),
+                    includeAudio: true,
+                }),
+            },
+            {
+                label: 'baseline+audio',
+                args: ['-i', inputName, '-map_metadata', '-1',
+                    '-vf', `scale=1.03*iw:-1,crop=iw/1.03:ih/1.03,${EVEN_SCALE}`,
+                    '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset, '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart', '-c:a', 'aac', '-b:a', enc.audioBitrate, 'output.mp4'],
+            },
+            {
+                label: 'baseline',
+                args: ['-i', inputName, '-map_metadata', '-1',
+                    '-vf', `scale=1.03*iw:-1,crop=iw/1.03:ih/1.03,${EVEN_SCALE}`,
+                    '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset, '-an', 'output.mp4'],
+            },
+        ];
+
+        let lastErr = null;
+        for (const attempt of attempts) {
+            try {
+                statusText.innerText = attempt.label === 'full'
+                    ? `Transforming (${strength}, ${$('qualitySelect').value} quality)…`
+                    : `Retrying (${attempt.label})…`;
+                await runFfmpeg(attempt.args);
+                lastErr = null;
+                break;
+            } catch (err) {
+                lastErr = err;
+                await cleanupFiles('output.mp4');
+            }
+        }
+        if (lastErr) throw lastErr;
+
+        return await ffmpeg.readFile('output.mp4');
+    }
+
+    function updateButtons() {
+        const ready = ffmpegReady && selectedFile;
+        $('processBtn').disabled = !ready;
+        $('checkBtn').disabled = !selectedFile;
+        if (ffmpegReady) {
+            $('processBtn').innerText = ready ? 'Transform video' : 'Select a video';
         }
     }
 
     async function initFFmpeg() {
-        statusContainer.style.display = 'block';
-        statusText.innerText = 'Downloading video engine (first visit may take a moment)...';
-
+        $('statusContainer').style.display = 'block';
+        $('statusText').innerText = 'Downloading video engine (first visit may take a minute)…';
         try {
             const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm';
             await ffmpeg.load({
                 coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
                 wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
             });
-
             ffmpegReady = true;
-            statusText.innerText = 'Engine ready. Select a video to begin.';
-            updateProcessButton();
+            $('statusText').innerText = 'Ready — select a video.';
+            updateButtons();
         } catch (error) {
-            console.error(error);
             ffmpegReady = false;
-            statusText.innerText = `Engine failed to load: ${error.message}. Try a hard refresh — cross-origin isolation is required.`;
-            processBtn.innerText = 'Engine unavailable';
-            processBtn.disabled = true;
+            $('statusText').innerText = `Engine failed: ${formatErr(error)}. Hard refresh required.`;
+            $('processBtn').innerText = 'Engine unavailable';
         }
     }
 
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) handleFileSelection(e.target.files[0]);
-    });
-
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = 'var(--accent-blue)';
-    });
-    dropZone.addEventListener('dragleave', () => {
-        dropZone.style.borderColor = '#3a3a3c';
-    });
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = '#3a3a3c';
-        if (e.dataTransfer.files.length > 0) handleFileSelection(e.dataTransfer.files[0]);
-    });
+    function revokeUrls() {
+        if (originalObjectUrl) URL.revokeObjectURL(originalObjectUrl);
+        if (outputObjectUrl) URL.revokeObjectURL(outputObjectUrl);
+        originalObjectUrl = outputObjectUrl = null;
+    }
 
     function handleFileSelection(file) {
         selectedFile = file;
-        uploadText.innerText = `${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
-        downloadBox.style.display = 'none';
-        updateProcessButton();
+        revokeUrls();
+        originalObjectUrl = URL.createObjectURL(file);
+        $('uploadText').innerText = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+        $('downloadBox').style.display = 'none';
+        $('checkerPanel').style.display = 'none';
+        updateButtons();
     }
 
-    processBtn.addEventListener('click', async () => {
+    $('dropZone').addEventListener('click', () => $('fileInput').click());
+    $('fileInput').addEventListener('change', (e) => {
+        if (e.target.files[0]) handleFileSelection(e.target.files[0]);
+    });
+    $('dropZone').addEventListener('dragover', (e) => { e.preventDefault(); $('dropZone').style.borderColor = 'var(--accent-blue)'; });
+    $('dropZone').addEventListener('dragleave', () => { $('dropZone').style.borderColor = '#3a3a3c'; });
+    $('dropZone').addEventListener('drop', (e) => {
+        e.preventDefault();
+        $('dropZone').style.borderColor = '#3a3a3c';
+        if (e.dataTransfer.files[0]) handleFileSelection(e.dataTransfer.files[0]);
+    });
+
+    $('checkBtn').addEventListener('click', async () => {
+        if (!selectedFile) return;
+        $('checkerPanel').style.display = 'block';
+        if (!outputObjectUrl && originalObjectUrl) {
+            $('checkerAdvice').textContent = 'No export yet — only the original is loaded. Run Transform first, or this scan compares after export.';
+            $('scoreValue').textContent = '—';
+            return;
+        }
+        if (!outputObjectUrl) return;
+        try {
+            const report = await runRiskCheck(originalObjectUrl, outputObjectUrl, lastStrength);
+            renderCheckerReport(report);
+        } catch (e) {
+            $('checkerAdvice').textContent = `Scan failed: ${formatErr(e)}`;
+        }
+    });
+
+    $('retryMaxBtn').addEventListener('click', () => {
+        $('strengthSelect').value = 'maximum';
+        $('applyVisual').checked = true;
+        $('applyAudio').checked = true;
+        $('applyTiming').checked = true;
+        $('processBtn').click();
+    });
+
+    $('processBtn').addEventListener('click', async () => {
         if (!selectedFile || !ffmpegReady) return;
 
-        statusContainer.style.display = 'block';
-        downloadBox.style.display = 'none';
-        processBtn.disabled = true;
-        progressFill.style.width = '0%';
+        $('statusContainer').style.display = 'block';
+        $('downloadBox').style.display = 'none';
+        $('checkerPanel').style.display = 'none';
+        $('processBtn').disabled = true;
+        $('checkBtn').disabled = true;
+        $('progressFill').style.width = '0%';
+        lastFfmpegLogs = [];
 
         const onLog = ({ message }) => {
             lastFfmpegLogs.push(message);
-            console.log(message);
             if (message.includes('frame=')) {
-                statusText.innerText = `Analyzing and adjusting pixels... ${message.substring(0, 40)}`;
+                $('statusText').innerText = `Encoding… ${message.substring(0, 50)}`;
             }
         };
-        ffmpeg.on('log', onLog);
-
-        ffmpeg.on('progress', ({ progress }) => {
+        const onProgress = ({ progress }) => {
             const pct = Math.min(Math.round(progress * 100), 99);
-            progressFill.style.width = `${pct}%`;
-            statusText.innerText = `Transforming video stream matrices... (${pct}%)`;
-        });
+            $('progressFill').style.width = `${pct}%`;
+            $('statusText').innerText = `Encoding… ${pct}%`;
+        };
+        ffmpeg.on('log', onLog);
+        ffmpeg.on('progress', onProgress);
 
         try {
-            lastFfmpegLogs = [];
-            statusText.innerText = 'Loading raw video timeline data...';
-            const ext = (selectedFile.name.split('.').pop() || 'mp4').toLowerCase();
-            const inputName = `input.${ext}`;
-            const profile = buildTransformProfile();
+            if (!originalObjectUrl) originalObjectUrl = URL.createObjectURL(selectedFile);
 
-            await cleanupFiles(inputName, 'output.mp4');
-            await ffmpeg.writeFile(inputName, new Uint8Array(await selectedFile.arrayBuffer()));
+            const data = await processVideo();
+            if (outputObjectUrl) URL.revokeObjectURL(outputObjectUrl);
+            outputObjectUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
 
-            const useVisual = document.getElementById('applyVisual').checked;
-            const useAudio = document.getElementById('applyAudio').checked;
-            const useTiming = document.getElementById('applyTiming').checked;
-            const hasAudio = await probeHasAudio(inputName);
+            $('progressFill').style.width = '100%';
+            $('downloadLink').href = outputObjectUrl;
+            $('downloadBox').style.display = 'block';
+            $('statusText').innerText = 'Export done — running risk scan…';
 
-            const videoFilters = buildVideoFilters(profile, useVisual, useTiming);
-            const audioFilters = buildAudioFilters(profile, useAudio && hasAudio, useTiming);
-
-            const videoNoHue = videoFilters.filter((f) => !f.startsWith('hue='));
-            const videoNoTiming = videoNoHue.filter((f) => !f.startsWith('setpts='));
-            const attempts = [
-                {
-                    label: 'full',
-                    args: buildFfmpegArgs(inputName, profile, {
-                        videoFilters,
-                        audioFilters,
-                        includeAudio: hasAudio,
-                    }),
-                },
-                {
-                    label: 'no-hue',
-                    args: buildFfmpegArgs(inputName, profile, {
-                        videoFilters: videoNoHue,
-                        audioFilters,
-                        includeAudio: hasAudio,
-                    }),
-                },
-                {
-                    label: 'no-timing',
-                    args: buildFfmpegArgs(inputName, profile, {
-                        videoFilters: videoNoTiming,
-                        audioFilters,
-                        includeAudio: hasAudio,
-                    }),
-                },
-                {
-                    label: 'no-audio-fx',
-                    args: buildFfmpegArgs(inputName, profile, {
-                        videoFilters: videoNoTiming,
-                        audioFilters: [],
-                        includeAudio: hasAudio,
-                    }),
-                },
-                {
-                    label: 'minimal',
-                    args: buildFfmpegArgs(inputName, profile, {
-                        videoFilters: [
-                            `scale=iw*${profile.scale}:ih*${profile.scale}`,
-                            `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
-                            `eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`,
-                        ],
-                        audioFilters: [],
-                        includeAudio: hasAudio,
-                    }),
-                },
-                {
-                    label: 'video-only',
-                    args: buildFfmpegArgs(inputName, profile, {
-                        videoFilters: [
-                            `scale=iw*${profile.scale}:ih*${profile.scale}`,
-                            `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
-                        ],
-                        audioFilters: [],
-                        includeAudio: false,
-                    }),
-                },
-            ];
-
-            let lastErr = null;
-            for (const attempt of attempts) {
-                try {
-                    statusText.innerText = attempt.label === 'full'
-                        ? 'Applying fingerprint breaks...'
-                        : `Retrying (${attempt.label})...`;
-                    console.log(`FFmpeg [${attempt.label}]:`, attempt.args.join(' '));
-                    await runFfmpeg(attempt.args);
-                    lastErr = null;
-                    break;
-                } catch (err) {
-                    lastErr = err;
-                    console.warn(`FFmpeg [${attempt.label}] failed:`, formatErr(err));
-                    await cleanupFiles('output.mp4');
-                }
-            }
-
-            if (lastErr) {
-                const logTail = lastFfmpegLogs.filter((l) => /error|invalid|failed|not found/i.test(l)).slice(-3).join(' | ');
-                throw new Error(logTail || formatErr(lastErr));
-            }
-
-            statusText.innerText = 'Reassembling final video file layers...';
-            const data = await ffmpeg.readFile('output.mp4');
-
-            const cleanBlob = new Blob([data.buffer], { type: 'video/mp4' });
-            const downloadUrl = URL.createObjectURL(cleanBlob);
-
-            progressFill.style.width = '100%';
-            statusText.innerText = 'Complete! Video fingerprint updated.';
-
-            downloadLink.href = downloadUrl;
-            downloadBox.style.display = 'block';
+            const report = await runRiskCheck(originalObjectUrl, outputObjectUrl, lastStrength);
+            renderCheckerReport(report);
+            $('statusText').innerText = `Done — uniqueness ${report.uniqueness}/100 (${report.risk} risk)`;
         } catch (err) {
-            console.error(err);
-            statusText.innerText = `Process Failed: ${formatErr(err)}`;
+            console.error(err, lastFfmpegLogs.slice(-20));
+            $('statusText').innerText = `Failed: ${formatErr(err) || getLogErrorHint()}`;
         } finally {
             ffmpeg.off('log', onLog);
-            updateProcessButton();
+            ffmpeg.off('progress', onProgress);
+            updateButtons();
         }
     });
 
