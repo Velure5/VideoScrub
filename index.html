@@ -36,7 +36,7 @@
         .container {
             background: var(--card-bg);
             width: 100%;
-            max-width: 550px;
+            max-width: 580px;
             border-radius: 16px;
             padding: 30px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -193,7 +193,7 @@
 
 <div class="container">
     <h1>TikTok Unique-Fi</h1>
-    <p class="subtitle">Wipes video metadata and rewrites signature pixels completely in-browser.</p>
+    <p class="subtitle">Breaks visual, audio, and file fingerprints — tuned for TikTok duplicate detection.</p>
 
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
         <div class="upload-icon">🎬</div>
@@ -202,21 +202,28 @@
     </div>
 
     <div class="tweak-panel">
-        <h3>Processing Modifiers</h3>
+        <h3>Anti-Detection Layers</h3>
         <div class="checkbox-group">
             <label class="checkbox-label">
                 <input type="checkbox" id="wipeMeta" checked disabled>
-                Nuke Global Metadata & Timestamps (Forced)
+                Strip all metadata &amp; encoder fingerprints (forced)
             </label>
             <label class="checkbox-label">
-                <input type="checkbox" id="applyZoom" checked>
-                Apply Invisible Scale Adjust (1.01% Scale + Crop)
+                <input type="checkbox" id="applyVisual" checked>
+                Visual hash break (random crop, rotate, color, grain)
             </label>
             <label class="checkbox-label">
-                <input type="checkbox" id="applyColor" checked>
-                Subtle Saturation & Contrast Alternation
+                <input type="checkbox" id="applyAudio" checked>
+                Audio fingerprint break (micro pitch + EQ shift)
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="applyTiming" checked>
+                Timeline nudge (imperceptible speed sync)
             </label>
         </div>
+        <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.4;">
+            Each run uses randomized values so outputs never share the same signature. Enable all layers for best results.
+        </p>
     </div>
 
     <button id="processBtn" class="btn-process" disabled>Loading video engine...</button>
@@ -254,6 +261,70 @@
 
     let selectedFile = null;
     let ffmpegReady = false;
+
+    /** Random micro-variations so every export has a unique fingerprint. */
+    function buildTransformProfile() {
+        const sign = () => (Math.random() > 0.5 ? 1 : -1);
+        const cropPad = 4 + Math.floor(Math.random() * 5);
+        const cropX = Math.floor(Math.random() * cropPad);
+        const cropY = Math.floor(Math.random() * cropPad);
+        const scale = 1.015 + Math.random() * 0.02;
+        const rotRad = sign() * (0.002 + Math.random() * 0.004);
+        const hue = sign() * (1.5 + Math.random() * 3);
+        const sat = 1 + sign() * (0.012 + Math.random() * 0.02);
+        const contrast = 1 + sign() * (0.008 + Math.random() * 0.015);
+        const brightness = sign() * (0.004 + Math.random() * 0.01);
+        const noise = 6 + Math.floor(Math.random() * 10);
+        const pitch = 1 + sign() * (0.006 + Math.random() * 0.01);
+        const tempo = 1 / pitch;
+        const speed = 1 + sign() * (0.0015 + Math.random() * 0.003);
+        const treble = sign() * (0.4 + Math.random() * 1.2);
+        return {
+            cropPad, cropX, cropY, scale, rotRad, hue, sat, contrast, brightness,
+            noise, pitch, tempo, speed, treble,
+        };
+    }
+
+    function buildVideoFilters(profile, enabled) {
+        if (!enabled) return [];
+        const f = [];
+        f.push(`scale=iw*${profile.scale}:ih*${profile.scale}`);
+        f.push(`rotate=${profile.rotRad}:ow=iw:oh=ih:fillcolor=black`);
+        f.push(`crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`);
+        f.push(`eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`);
+        f.push(`hue=h=${profile.hue.toFixed(2)}`);
+        f.push(`noise=alls=${profile.noise}:allf=t+u`);
+        f.push('setsar=1');
+        if (document.getElementById('applyTiming').checked) {
+            f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
+        }
+        return f;
+    }
+
+    function buildAudioFilters(profile, enabled, useTiming) {
+        if (!enabled) return [];
+        const rate = Math.round(44100 * profile.pitch);
+        const tempo = profile.tempo * (useTiming ? profile.speed : 1);
+        return [
+            `asetrate=${rate}`,
+            'aresample=44100',
+            `atempo=${tempo.toFixed(5)}`,
+            `equalizer=f=3000:t=q:w=1.5:g=${profile.treble.toFixed(2)}`,
+            'highpass=f=40',
+        ];
+    }
+
+    async function probeHasAudio(inputName) {
+        const logs = [];
+        const onLog = ({ message }) => logs.push(message);
+        ffmpeg.on('log', onLog);
+        try {
+            await ffmpeg.ffprobe(['-i', inputName]);
+        } finally {
+            ffmpeg.off('log', onLog);
+        }
+        return logs.some((line) => /Audio:/i.test(line));
+    }
 
     function updateProcessButton() {
         if (!ffmpegReady) {
@@ -339,29 +410,91 @@
 
         try {
             statusText.innerText = 'Loading raw video timeline data...';
-            await ffmpeg.writeFile('input.mp4', new Uint8Array(await selectedFile.arrayBuffer()));
+            const ext = (selectedFile.name.split('.').pop() || 'mp4').toLowerCase();
+            const inputName = `input.${ext}`;
+            const profile = buildTransformProfile();
+            await ffmpeg.writeFile(inputName, new Uint8Array(await selectedFile.arrayBuffer()));
 
-            const useZoom = document.getElementById('applyZoom').checked;
-            const useColor = document.getElementById('applyColor').checked;
+            const useVisual = document.getElementById('applyVisual').checked;
+            const useAudio = document.getElementById('applyAudio').checked;
+            const useTiming = document.getElementById('applyTiming').checked;
+            const hasAudio = await probeHasAudio(inputName);
 
-            const ffmpegArgs = ['-i', 'input.mp4', '-map_metadata', '-1'];
+            const videoFilters = buildVideoFilters(profile, useVisual);
+            const audioFilters = buildAudioFilters(profile, useAudio && hasAudio, useTiming);
 
-            const videoFilters = [];
-            if (useZoom) {
-                videoFilters.push('scale=1.01*iw:-1', 'crop=iw/1.01:ih/1.01');
-            }
-            if (useColor) {
-                videoFilters.push('eq=contrast=1.005:saturation=1.01:brightness=0.002');
+            const ffmpegArgs = [
+                '-i', inputName,
+                '-map', '0:v:0',
+                '-map_metadata', '-1',
+                '-map_metadata:s:v', '-1',
+            ];
+
+            if (hasAudio) {
+                ffmpegArgs.push('-map', '0:a:0');
+                ffmpegArgs.push('-map_metadata:s:a', '-1');
+            } else {
+                ffmpegArgs.push('-an');
             }
 
             if (videoFilters.length > 0) {
                 ffmpegArgs.push('-vf', videoFilters.join(','));
             }
 
-            ffmpegArgs.push('-c:v', 'libx264', '-crf', '22', '-preset', 'ultrafast', '-c:a', 'aac', 'output.mp4');
+            if (audioFilters.length > 0) {
+                ffmpegArgs.push('-af', audioFilters.join(','));
+            }
 
-            statusText.innerText = 'Executing matrix overrides. Do not close tab...';
-            await ffmpeg.exec(ffmpegArgs);
+            ffmpegArgs.push(
+                '-c:v', 'libx264',
+                '-crf', '20',
+                '-preset', 'fast',
+                '-pix_fmt', 'yuv420p',
+                '-g', '48',
+                '-keyint_min', '48',
+                '-sc_threshold', '40',
+                '-movflags', '+faststart',
+            );
+
+            if (hasAudio) {
+                ffmpegArgs.push('-c:a', 'aac', '-b:a', '160k', '-ar', '44100', '-ac', '2');
+            }
+
+            ffmpegArgs.push('output.mp4');
+
+            statusText.innerText = `Applying ${videoFilters.length ? 'visual' : ''}${videoFilters.length && audioFilters.length ? ' + ' : ''}${audioFilters.length ? 'audio' : ''} fingerprint breaks...`;
+            console.log('Transform profile:', profile);
+            console.log('FFmpeg args:', ffmpegArgs.join(' '));
+
+            try {
+                await ffmpeg.exec(ffmpegArgs);
+            } catch (firstErr) {
+                console.warn('Full filter chain failed, retrying with safe filters:', firstErr);
+                statusText.innerText = 'Retrying with compatible filters...';
+                const safeArgs = [
+                    '-i', inputName,
+                    '-map', '0:v:0',
+                    '-map_metadata', '-1',
+                    '-vf', [
+                        `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
+                        `eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`,
+                        `noise=alls=${profile.noise}:allf=t`,
+                    ].join(','),
+                ];
+                if (hasAudio) {
+                    safeArgs.push('-map', '0:a:0', '-af',
+                        `asetrate=${Math.round(44100 * profile.pitch)},aresample=44100,atempo=${(profile.tempo * (useTiming ? profile.speed : 1)).toFixed(5)}`);
+                } else {
+                    safeArgs.push('-an');
+                }
+                safeArgs.push(
+                    '-c:v', 'libx264', '-crf', '20', '-preset', 'fast', '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
+                );
+                if (hasAudio) safeArgs.push('-c:a', 'aac', '-b:a', '160k');
+                safeArgs.push('output.mp4');
+                await ffmpeg.exec(safeArgs);
+            }
 
             statusText.innerText = 'Reassembling final video file layers...';
             const data = await ffmpeg.readFile('output.mp4');
