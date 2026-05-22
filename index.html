@@ -99,7 +99,7 @@
         </div>
         <div class="checkbox-group" style="margin-top:10px">
             <label class="checkbox-label"><input type="checkbox" id="upscale1080" checked> Upscale to TikTok-friendly 1080×1920 canvas</label>
-            <label class="checkbox-label"><input type="checkbox" id="qrSoftening" checked> Disrupt QR / barcode patterns</label>
+            <label class="checkbox-label"><input type="checkbox" id="qrSoftening" checked> Remove corner QR zones (inpaint + auto black fallback)</label>
             <label class="checkbox-label"><input type="checkbox" id="applyTiming" checked> Subtle timing shift</label>
             <label class="checkbox-label"><input type="checkbox" id="stripAudio" checked disabled> Strip audio (add music in TikTok)</label>
             <label class="checkbox-label"><input type="checkbox" id="applyFlip"> Mirror video (breaks text &amp; QR readability)</label>
@@ -187,18 +187,18 @@
         const tiers = {
             tiktok: {
                 scale: 1.028, cropW: 0.965, cropH: 0.965, trim: 0.04, speed: 1.004, fps: 30,
-                flip, blurSigma: 0.45, unsharp: '7:7:0.85:7:7:0.0',
-                eq: { c: 1.03, s: 1.04, b: 0.01 }, hue: 2,
+                flip, unsharp: '7:7:0.5:7:7:0.0',
+                eq: { c: 1.03, s: 1.04, b: 0.01 }, hue: 2, delogoPct: 0.28,
             },
             strong: {
                 scale: 1.06, cropW: 0.94, cropH: 0.94, trim: 0.08, speed: 1.012, fps: 30,
-                flip: flip || true, blurSigma: 0.6, unsharp: '5:5:1.0:5:5:0.0',
-                eq: { c: 1.06, s: 1.08, b: 0.02 }, hue: 6,
+                flip: flip || true, unsharp: '5:5:0.7:5:5:0.0',
+                eq: { c: 1.06, s: 1.08, b: 0.02 }, hue: 6, delogoPct: 0.32,
             },
             maximum: {
                 scale: 1.1, cropW: 0.9, cropH: 0.9, trim: 0.12, speed: 1.02, fps: 30,
-                flip: flip || true, blurSigma: 0.8, unsharp: '5:5:1.1:5:5:0.0',
-                eq: { c: 1.1, s: 1.12, b: 0.03 }, hue: 10,
+                flip: flip || true, unsharp: '5:5:0.8:5:5:0.0',
+                eq: { c: 1.1, s: 1.12, b: 0.03 }, hue: 10, delogoPct: 0.36,
             },
         };
         const t = tiers[strength] || tiers.tiktok;
@@ -208,15 +208,41 @@
         return {
             scale: t.scale, cropW: t.cropW, cropH: t.cropH, cropX, cropY,
             trim: t.trim, speed, fps: t.fps, flip: t.flip,
-            blurSigma: t.blurSigma, unsharp: t.unsharp,
+            unsharp: t.unsharp, delogoPct: t.delogoPct,
             contrast: t.eq.c, sat: t.eq.s, brightness: t.eq.b, hue: t.hue * sign(),
             strength, upscale: $('upscale1080').checked, qrSoft: $('qrSoftening').checked,
         };
     }
 
     const TIKTOK_CANVAS = 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1';
+    const CANVAS_W = 1080;
+    const CANVAS_H = 1920;
 
-    function buildVideoFilters(profile, useTiming) {
+    /** Interpolate away QR/logo blocks in each corner (after upscale to 1080×1920). */
+    function cornerDelogoFilters(pct) {
+        const w = Math.round(CANVAS_W * pct);
+        const h = Math.round(CANVAS_H * pct);
+        return [
+            `delogo=x=0:y=0:w=${w}:h=${h}`,
+            `delogo=x=${CANVAS_W - w}:y=0:w=${w}:h=${h}`,
+            `delogo=x=0:y=${CANVAS_H - h}:w=${w}:h=${h}`,
+            `delogo=x=${CANVAS_W - w}:y=${CANVAS_H - h}:w=${w}:h=${h}`,
+        ];
+    }
+
+    /** Fallback: opaque boxes on corners — guarantees QR signal → 0. */
+    function cornerDrawboxKill(pct = 0.28) {
+        const pw = `iw*${pct}`;
+        const ph = `ih*${pct}`;
+        return [
+            `drawbox=x=0:y=0:w=${pw}:h=${ph}:color=black@1:t=fill`,
+            `drawbox=x=iw-${pw}:y=0:w=${pw}:h=${ph}:color=black@1:t=fill`,
+            `drawbox=x=0:y=ih-${ph}:w=${pw}:h=${ph}:color=black@1:t=fill`,
+            `drawbox=x=iw-${pw}:y=ih-${ph}:w=${pw}:h=${ph}:color=black@1:t=fill`,
+        ];
+    }
+
+    function buildVideoFilters(profile, useTiming, { qrKillMode = 'delogo' } = {}) {
         const f = [];
         if (profile.trim > 0) {
             f.push(`trim=start=${profile.trim.toFixed(3)}`, 'setpts=PTS-STARTPTS');
@@ -226,56 +252,113 @@
         f.push(`crop=iw*${profile.cropW}:ih*${profile.cropH}:iw*${profile.cropX}:ih*${profile.cropY}`);
         f.push(`eq=contrast=${profile.contrast}:saturation=${profile.sat}:brightness=${profile.brightness}`);
         if (Math.abs(profile.hue) > 0.5) f.push(`hue=h=${profile.hue.toFixed(1)}`);
-        if (profile.qrSoft && profile.blurSigma > 0) {
-            f.push(`gblur=sigma=${profile.blurSigma}`);
-        }
-        if (profile.unsharp) f.push(`unsharp=${profile.unsharp}`);
         if (useTiming) {
             f.push(`fps=${profile.fps}`);
             f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
         }
         if (profile.upscale) f.push(TIKTOK_CANVAS);
+        if (profile.qrSoft) {
+            if (qrKillMode === 'drawbox') {
+                f.push(...cornerDrawboxKill(profile.delogoPct));
+            } else if (profile.upscale) {
+                f.push(...cornerDelogoFilters(profile.delogoPct));
+            } else {
+                f.push(...cornerDrawboxKill(profile.delogoPct));
+            }
+        }
+        if (profile.unsharp && qrKillMode !== 'drawbox') f.push(`unsharp=${profile.unsharp}`);
         f.push(EVEN_SCALE);
         return f;
     }
 
-    function encodeArgsTail(enc) {
+    function encodeArgsTail(enc, outFile = 'output.mp4') {
         return [
             '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset,
             '-maxrate', enc.maxrate, '-bufsize', enc.bufsize,
             '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2',
-            '-movflags', '+faststart', '-an', 'output.mp4',
+            '-movflags', '+faststart', '-an', outFile,
         ];
     }
 
-    /** Heuristic: high-contrast edges in corners often = QR / barcode. */
+    async function applyQrKillPass(fileBytes, profile, enc) {
+        await cleanupFiles('qrpass.mp4', 'output.mp4');
+        await ffmpeg.writeFile('qrpass.mp4', fileBytes);
+        const vf = [...cornerDrawboxKill(Math.min(0.34, profile.delogoPct + 0.06)), EVEN_SCALE];
+        await runFfmpeg(['-i', 'qrpass.mp4', '-map_metadata', '-1', '-vf', vf.join(','), ...encodeArgsTail(enc)]);
+        return await ffmpeg.readFile('output.mp4');
+    }
+
+    function lumAt(data, sz, x, y) {
+        const i = (y * sz + x) * 4;
+        return data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    }
+
+    /** Checkerboard variance + sharp edges in a patch (0 = no QR-like pattern). */
+    function analyzeCornerQrPattern(data, sz) {
+        const cells = 6;
+        const cellSz = Math.max(2, Math.floor(sz / cells));
+        const cellMeans = [];
+        for (let cy = 0; cy < cells; cy++) {
+            for (let cx = 0; cx < cells; cx++) {
+                let s = 0;
+                let n = 0;
+                for (let y = cy * cellSz; y < Math.min((cy + 1) * cellSz, sz); y++) {
+                    for (let x = cx * cellSz; x < Math.min((cx + 1) * cellSz, sz); x++) {
+                        s += lumAt(data, sz, x, y);
+                        n++;
+                    }
+                }
+                cellMeans.push(s / n);
+            }
+        }
+        const avg = cellMeans.reduce((a, b) => a + b, 0) / cellMeans.length;
+        let variance = 0;
+        for (const m of cellMeans) variance += (m - avg) ** 2;
+        variance /= cellMeans.length;
+
+        let sharp = 0;
+        const total = (sz - 2) * (sz - 2);
+        for (let y = 1; y < sz - 1; y++) {
+            for (let x = 1; x < sz - 1; x++) {
+                const l = lumAt(data, sz, x, y);
+                if (Math.abs(l - lumAt(data, sz, x + 1, y)) > 28
+                    && Math.abs(l - lumAt(data, sz, x, y + 1)) > 28) sharp++;
+            }
+        }
+        const checkerScore = Math.min(100, Math.sqrt(variance) * 1.1);
+        const edgeScore = (sharp / total) * 100;
+        return Math.round(Math.min(100, checkerScore * 0.5 + edgeScore * 0.5));
+    }
+
     async function scanQrLikelihood(videoUrl) {
         const video = await loadVideoMeta(videoUrl);
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const sz = 48;
+        const sz = 64;
         canvas.width = canvas.height = sz;
         const corners = [
             { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 },
         ];
-        let maxScore = 0;
-        const t = Math.min(video.duration * 0.35, video.duration - 0.1);
-        await new Promise((res) => { video.onseeked = res; video.currentTime = Math.max(0.05, t); });
-        for (const c of corners) {
-            const sx = Math.floor(c.x * (video.videoWidth - sz));
-            const sy = Math.floor(c.y * (video.videoHeight - sz));
-            ctx.drawImage(video, sx, sy, sz, sz, 0, 0, sz, sz);
-            const d = ctx.getImageData(0, 0, sz, sz).data;
-            let edges = 0;
-            for (let i = 0; i < d.length; i += 4) {
-                const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-                if (lum < 60 || lum > 200) edges++;
+        const times = [0.12, 0.35, 0.55, 0.78];
+        let worst = 0;
+
+        for (const timeFrac of times) {
+            const t = Math.min(Math.max(video.duration * timeFrac, 0.05), Math.max(video.duration - 0.1, 0.05));
+            await new Promise((res, rej) => {
+                video.onseeked = () => res();
+                video.onerror = () => rej(new Error('Seek failed'));
+                video.currentTime = t;
+            });
+            for (const c of corners) {
+                const sx = Math.max(0, Math.floor(c.x * (video.videoWidth - sz)));
+                const sy = Math.max(0, Math.floor(c.y * (video.videoHeight - sz)));
+                ctx.drawImage(video, sx, sy, sz, sz, 0, 0, sz, sz);
+                const score = analyzeCornerQrPattern(ctx.getImageData(0, 0, sz, sz).data, sz);
+                if (score > worst) worst = score;
             }
-            const score = (edges / (sz * sz)) * 100;
-            if (score > maxScore) maxScore = score;
         }
         video.src = '';
-        return Math.round(maxScore);
+        return worst;
     }
 
     function buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters, includeAudio }) {
@@ -478,8 +561,8 @@
             ]);
         } catch (_) { /* scan optional */ }
 
-        const qrRisk = qrOut >= 55;
-        const qrImproved = qrOrig >= 55 && qrOut < qrOrig - 10;
+        const qrRisk = qrOut >= 12;
+        const qrImproved = qrOrig >= 20 && qrOut < Math.max(8, qrOrig - 25);
 
         let risk = 'high';
         let riskClass = 'risk-high';
@@ -488,9 +571,11 @@
 
         const tips = [];
         if (qrRisk) {
-            tips.push('QR/barcode pattern still detected — cover QR areas with stickers/text in CapCut, or crop them out before processing.');
+            tips.push('Corner QR pattern still visible — re-run with QR softening on; if QR is in the center of frame, crop it out in CapCut.');
+        } else if (qrOut <= 5) {
+            tips.push('Corner QR signal cleared.');
         } else if (qrImproved) {
-            tips.push('QR-style corner pattern was softened.');
+            tips.push('Corner QR pattern reduced vs original.');
         }
         if (visualDiffPct < 20 && strength !== 'maximum') {
             tips.push('Try Strong mode if TikTok still flags as unoriginal.');
@@ -517,12 +602,12 @@
         $('metricList').innerHTML = `
             <li><span>File hash</span><span class="metric-val">${report.fileHashChanged ? 'Changed ✓' : 'Unchanged ✗'}</span></li>
             <li><span>Pixel shift</span><span class="metric-val">${report.visualDiffPct.toFixed(1)}%</span></li>
-            <li><span>QR corner signal</span><span class="metric-val">${report.qrOut ?? '—'}% ${report.qrRisk ? '⚠ still high' : '✓'}</span></li>
+            <li><span>QR corner signal</span><span class="metric-val">${report.qrOut ?? '—'}% ${report.qrOut <= 5 ? '✓ cleared' : report.qrRisk ? '⚠ reduce more' : '✓ low'}</span></li>
             <li><span>Audio</span><span class="metric-val">${report.audioRemoved ? 'Stripped ✓' : 'Present'}</span></li>
             <li><span>Mode</span><span class="metric-val">${lastStrength}</span></li>
         `;
         $('checkerAdvice').textContent = report.advice;
-        $('retryMaxBtn').style.display = (report.uniqueness < 65 || report.qrRisk) ? 'block' : 'none';
+        $('retryMaxBtn').style.display = (report.uniqueness < 65 || report.qrOut > 8) ? 'block' : 'none';
     }
 
     async function processVideo(forceStrength) {
@@ -537,34 +622,28 @@
         await cleanupFiles(inputName, 'output.mp4');
         await ffmpeg.writeFile(inputName, new Uint8Array(await selectedFile.arrayBuffer()));
 
-        const videoFilters = buildVideoFilters(profile, useTiming);
-        const noBlur = videoFilters.filter((f) => !f.startsWith('gblur='));
-        const noCanvas = noBlur.filter((f) => !f.includes('1080:1920'));
         const enc = getEncodeSettings();
+        const videoDelogo = buildVideoFilters(profile, useTiming, { qrKillMode: 'delogo' });
+        const videoDrawbox = buildVideoFilters(profile, useTiming, { qrKillMode: 'drawbox' });
+        const videoNoQr = buildVideoFilters({ ...profile, qrSoft: false }, useTiming);
 
         const attempts = [
             {
-                label: 'tiktok-hd',
-                args: buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters: [], includeAudio: false }),
+                label: 'qr-delogo',
+                args: buildFfmpegArgs(inputName, profile, { videoFilters: videoDelogo, audioFilters: [], includeAudio: false }),
             },
             {
-                label: 'no-blur',
-                args: buildFfmpegArgs(inputName, profile, { videoFilters: noBlur, audioFilters: [], includeAudio: false }),
+                label: 'qr-drawbox',
+                args: buildFfmpegArgs(inputName, profile, { videoFilters: videoDrawbox, audioFilters: [], includeAudio: false }),
             },
             {
-                label: 'no-canvas',
-                args: buildFfmpegArgs(inputName, profile, { videoFilters: noCanvas, audioFilters: [], includeAudio: false }),
+                label: 'no-qr-kill',
+                args: buildFfmpegArgs(inputName, profile, { videoFilters: videoNoQr, audioFilters: [], includeAudio: false }),
             },
             {
                 label: 'clean-hd',
                 args: ['-i', inputName, '-map_metadata', '-1',
-                    '-vf', `scale=iw*1.025:ih*1.025:flags=lanczos,crop=iw*0.97:ih*0.97:iw*0.015:ih*0.015,eq=contrast=1.03:saturation=1.04,unsharp=7:7:0.85:7:7:0,fps=30,${TIKTOK_CANVAS},${EVEN_SCALE}`,
-                    ...encodeArgsTail(enc)],
-            },
-            {
-                label: 'minimal',
-                args: ['-i', inputName, '-map_metadata', '-1',
-                    '-vf', `scale=iw*1.02:ih*1.02:flags=lanczos,crop=iw*0.98:ih*0.98:iw*0.01:ih*0.01,unsharp=5:5:0.6:5:5:0,${EVEN_SCALE}`,
+                    '-vf', `scale=iw*1.025:ih*1.025:flags=lanczos,crop=iw*0.97:ih*0.97:iw*0.015:ih*0.015,eq=contrast=1.03:saturation=1.04,fps=30,${TIKTOK_CANVAS},${cornerDrawboxKill(0.28).join(',')},${EVEN_SCALE}`,
                     ...encodeArgsTail(enc)],
             },
         ];
@@ -572,8 +651,8 @@
         let lastErr = null;
         for (const attempt of attempts) {
             try {
-                $('statusText').innerText = attempt.label === 'tiktok-hd'
-                    ? `TikTok HD export (${strength})…`
+                $('statusText').innerText = attempt.label === 'qr-delogo'
+                    ? `Exporting + removing corner QR zones…`
                     : `Retrying (${attempt.label})…`;
                 await runFfmpeg(attempt.args);
                 lastErr = null;
@@ -585,7 +664,19 @@
         }
         if (lastErr) throw lastErr;
 
-        return await ffmpeg.readFile('output.mp4');
+        let data = await ffmpeg.readFile('output.mp4');
+
+        if (profile.qrSoft) {
+            const checkUrl = URL.createObjectURL(new Blob([data], { type: 'video/mp4' }));
+            let qrScore = await scanQrLikelihood(checkUrl);
+            URL.revokeObjectURL(checkUrl);
+            if (qrScore > 8) {
+                $('statusText').innerText = `QR corners still ${qrScore}% — applying hard removal…`;
+                data = await applyQrKillPass(data, profile, enc);
+            }
+        }
+
+        return data;
     }
 
     function updateButtons() {
