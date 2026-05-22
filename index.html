@@ -261,6 +261,14 @@
 
     let selectedFile = null;
     let ffmpegReady = false;
+    let lastFfmpegLogs = [];
+
+    function formatErr(err) {
+        if (typeof err === 'string') return err;
+        if (err instanceof Error) return err.message;
+        if (err && typeof err === 'object') return err.message || JSON.stringify(err);
+        return String(err);
+    }
 
     /** Random micro-variations so every export has a unique fingerprint. */
     function buildTransformProfile() {
@@ -269,33 +277,30 @@
         const cropX = Math.floor(Math.random() * cropPad);
         const cropY = Math.floor(Math.random() * cropPad);
         const scale = 1.015 + Math.random() * 0.02;
-        const rotRad = sign() * (0.002 + Math.random() * 0.004);
         const hue = sign() * (1.5 + Math.random() * 3);
         const sat = 1 + sign() * (0.012 + Math.random() * 0.02);
         const contrast = 1 + sign() * (0.008 + Math.random() * 0.015);
         const brightness = sign() * (0.004 + Math.random() * 0.01);
-        const noise = 6 + Math.floor(Math.random() * 10);
         const pitch = 1 + sign() * (0.006 + Math.random() * 0.01);
         const tempo = 1 / pitch;
         const speed = 1 + sign() * (0.0015 + Math.random() * 0.003);
-        const treble = sign() * (0.4 + Math.random() * 1.2);
+        const volume = (0.97 + Math.random() * 0.06).toFixed(3);
         return {
-            cropPad, cropX, cropY, scale, rotRad, hue, sat, contrast, brightness,
-            noise, pitch, tempo, speed, treble,
+            cropPad, cropX, cropY, scale, hue, sat, contrast, brightness,
+            pitch, tempo, speed, volume,
         };
     }
 
-    function buildVideoFilters(profile, enabled) {
+    /** Filters known to work in @ffmpeg/core WASM builds. */
+    function buildVideoFilters(profile, enabled, useTiming) {
         if (!enabled) return [];
-        const f = [];
-        f.push(`scale=iw*${profile.scale}:ih*${profile.scale}`);
-        f.push(`rotate=${profile.rotRad}:ow=iw:oh=ih:fillcolor=black`);
-        f.push(`crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`);
-        f.push(`eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`);
-        f.push(`hue=h=${profile.hue.toFixed(2)}`);
-        f.push(`noise=alls=${profile.noise}:allf=t+u`);
-        f.push('setsar=1');
-        if (document.getElementById('applyTiming').checked) {
+        const f = [
+            `scale=iw*${profile.scale}:ih*${profile.scale}`,
+            `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
+            `eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`,
+            `hue=h=${profile.hue.toFixed(2)}`,
+        ];
+        if (useTiming) {
             f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
         }
         return f;
@@ -303,15 +308,34 @@
 
     function buildAudioFilters(profile, enabled, useTiming) {
         if (!enabled) return [];
+        let tempo = profile.tempo * (useTiming ? profile.speed : 1);
+        tempo = Math.min(2, Math.max(0.5, tempo));
         const rate = Math.round(44100 * profile.pitch);
-        const tempo = profile.tempo * (useTiming ? profile.speed : 1);
         return [
             `asetrate=${rate}`,
             'aresample=44100',
             `atempo=${tempo.toFixed(5)}`,
-            `equalizer=f=3000:t=q:w=1.5:g=${profile.treble.toFixed(2)}`,
             'highpass=f=40',
+            `volume=${profile.volume}`,
         ];
+    }
+
+    function buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters, includeAudio }) {
+        const args = ['-i', inputName, '-map_metadata', '-1'];
+        if (videoFilters.length) args.push('-vf', videoFilters.join(','));
+        if (audioFilters.length) args.push('-af', audioFilters.join(','));
+        args.push('-c:v', 'libx264', '-crf', '22', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p');
+        if (includeAudio) {
+            args.push('-c:a', 'aac', '-b:a', '128k');
+        } else {
+            args.push('-an');
+        }
+        args.push('output.mp4');
+        return args;
+    }
+
+    async function runFfmpeg(args) {
+        await ffmpeg.exec(args);
     }
 
     async function probeHasAudio(inputName) {
@@ -320,10 +344,18 @@
         ffmpeg.on('log', onLog);
         try {
             await ffmpeg.ffprobe(['-i', inputName]);
+        } catch (e) {
+            console.warn('ffprobe warning:', formatErr(e));
         } finally {
             ffmpeg.off('log', onLog);
         }
         return logs.some((line) => /Audio:/i.test(line));
+    }
+
+    async function cleanupFiles(...names) {
+        for (const name of names) {
+            try { await ffmpeg.deleteFile(name); } catch (_) { /* not present */ }
+        }
     }
 
     function updateProcessButton() {
@@ -395,12 +427,14 @@
         processBtn.disabled = true;
         progressFill.style.width = '0%';
 
-        ffmpeg.on('log', ({ message }) => {
+        const onLog = ({ message }) => {
+            lastFfmpegLogs.push(message);
             console.log(message);
             if (message.includes('frame=')) {
                 statusText.innerText = `Analyzing and adjusting pixels... ${message.substring(0, 40)}`;
             }
-        });
+        };
+        ffmpeg.on('log', onLog);
 
         ffmpeg.on('progress', ({ progress }) => {
             const pct = Math.min(Math.round(progress * 100), 99);
@@ -409,10 +443,13 @@
         });
 
         try {
+            lastFfmpegLogs = [];
             statusText.innerText = 'Loading raw video timeline data...';
             const ext = (selectedFile.name.split('.').pop() || 'mp4').toLowerCase();
             const inputName = `input.${ext}`;
             const profile = buildTransformProfile();
+
+            await cleanupFiles(inputName, 'output.mp4');
             await ffmpeg.writeFile(inputName, new Uint8Array(await selectedFile.arrayBuffer()));
 
             const useVisual = document.getElementById('applyVisual').checked;
@@ -420,80 +457,89 @@
             const useTiming = document.getElementById('applyTiming').checked;
             const hasAudio = await probeHasAudio(inputName);
 
-            const videoFilters = buildVideoFilters(profile, useVisual);
+            const videoFilters = buildVideoFilters(profile, useVisual, useTiming);
             const audioFilters = buildAudioFilters(profile, useAudio && hasAudio, useTiming);
 
-            const ffmpegArgs = [
-                '-i', inputName,
-                '-map', '0:v:0',
-                '-map_metadata', '-1',
-                '-map_metadata:s:v', '-1',
+            const videoNoHue = videoFilters.filter((f) => !f.startsWith('hue='));
+            const videoNoTiming = videoNoHue.filter((f) => !f.startsWith('setpts='));
+            const attempts = [
+                {
+                    label: 'full',
+                    args: buildFfmpegArgs(inputName, profile, {
+                        videoFilters,
+                        audioFilters,
+                        includeAudio: hasAudio,
+                    }),
+                },
+                {
+                    label: 'no-hue',
+                    args: buildFfmpegArgs(inputName, profile, {
+                        videoFilters: videoNoHue,
+                        audioFilters,
+                        includeAudio: hasAudio,
+                    }),
+                },
+                {
+                    label: 'no-timing',
+                    args: buildFfmpegArgs(inputName, profile, {
+                        videoFilters: videoNoTiming,
+                        audioFilters,
+                        includeAudio: hasAudio,
+                    }),
+                },
+                {
+                    label: 'no-audio-fx',
+                    args: buildFfmpegArgs(inputName, profile, {
+                        videoFilters: videoNoTiming,
+                        audioFilters: [],
+                        includeAudio: hasAudio,
+                    }),
+                },
+                {
+                    label: 'minimal',
+                    args: buildFfmpegArgs(inputName, profile, {
+                        videoFilters: [
+                            `scale=iw*${profile.scale}:ih*${profile.scale}`,
+                            `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
+                            `eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`,
+                        ],
+                        audioFilters: [],
+                        includeAudio: hasAudio,
+                    }),
+                },
+                {
+                    label: 'video-only',
+                    args: buildFfmpegArgs(inputName, profile, {
+                        videoFilters: [
+                            `scale=iw*${profile.scale}:ih*${profile.scale}`,
+                            `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
+                        ],
+                        audioFilters: [],
+                        includeAudio: false,
+                    }),
+                },
             ];
 
-            if (hasAudio) {
-                ffmpegArgs.push('-map', '0:a:0');
-                ffmpegArgs.push('-map_metadata:s:a', '-1');
-            } else {
-                ffmpegArgs.push('-an');
-            }
-
-            if (videoFilters.length > 0) {
-                ffmpegArgs.push('-vf', videoFilters.join(','));
-            }
-
-            if (audioFilters.length > 0) {
-                ffmpegArgs.push('-af', audioFilters.join(','));
-            }
-
-            ffmpegArgs.push(
-                '-c:v', 'libx264',
-                '-crf', '20',
-                '-preset', 'fast',
-                '-pix_fmt', 'yuv420p',
-                '-g', '48',
-                '-keyint_min', '48',
-                '-sc_threshold', '40',
-                '-movflags', '+faststart',
-            );
-
-            if (hasAudio) {
-                ffmpegArgs.push('-c:a', 'aac', '-b:a', '160k', '-ar', '44100', '-ac', '2');
-            }
-
-            ffmpegArgs.push('output.mp4');
-
-            statusText.innerText = `Applying ${videoFilters.length ? 'visual' : ''}${videoFilters.length && audioFilters.length ? ' + ' : ''}${audioFilters.length ? 'audio' : ''} fingerprint breaks...`;
-            console.log('Transform profile:', profile);
-            console.log('FFmpeg args:', ffmpegArgs.join(' '));
-
-            try {
-                await ffmpeg.exec(ffmpegArgs);
-            } catch (firstErr) {
-                console.warn('Full filter chain failed, retrying with safe filters:', firstErr);
-                statusText.innerText = 'Retrying with compatible filters...';
-                const safeArgs = [
-                    '-i', inputName,
-                    '-map', '0:v:0',
-                    '-map_metadata', '-1',
-                    '-vf', [
-                        `crop=iw-${profile.cropPad}:ih-${profile.cropPad}:${profile.cropX}:${profile.cropY}`,
-                        `eq=contrast=${profile.contrast.toFixed(4)}:saturation=${profile.sat.toFixed(4)}:brightness=${profile.brightness.toFixed(4)}`,
-                        `noise=alls=${profile.noise}:allf=t`,
-                    ].join(','),
-                ];
-                if (hasAudio) {
-                    safeArgs.push('-map', '0:a:0', '-af',
-                        `asetrate=${Math.round(44100 * profile.pitch)},aresample=44100,atempo=${(profile.tempo * (useTiming ? profile.speed : 1)).toFixed(5)}`);
-                } else {
-                    safeArgs.push('-an');
+            let lastErr = null;
+            for (const attempt of attempts) {
+                try {
+                    statusText.innerText = attempt.label === 'full'
+                        ? 'Applying fingerprint breaks...'
+                        : `Retrying (${attempt.label})...`;
+                    console.log(`FFmpeg [${attempt.label}]:`, attempt.args.join(' '));
+                    await runFfmpeg(attempt.args);
+                    lastErr = null;
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                    console.warn(`FFmpeg [${attempt.label}] failed:`, formatErr(err));
+                    await cleanupFiles('output.mp4');
                 }
-                safeArgs.push(
-                    '-c:v', 'libx264', '-crf', '20', '-preset', 'fast', '-pix_fmt', 'yuv420p',
-                    '-movflags', '+faststart',
-                );
-                if (hasAudio) safeArgs.push('-c:a', 'aac', '-b:a', '160k');
-                safeArgs.push('output.mp4');
-                await ffmpeg.exec(safeArgs);
+            }
+
+            if (lastErr) {
+                const logTail = lastFfmpegLogs.filter((l) => /error|invalid|failed|not found/i.test(l)).slice(-3).join(' | ');
+                throw new Error(logTail || formatErr(lastErr));
             }
 
             statusText.innerText = 'Reassembling final video file layers...';
@@ -509,8 +555,9 @@
             downloadBox.style.display = 'block';
         } catch (err) {
             console.error(err);
-            statusText.innerText = `Process Failed: ${err.message || 'Unknown error.'}`;
+            statusText.innerText = `Process Failed: ${formatErr(err)}`;
         } finally {
+            ffmpeg.off('log', onLog);
             updateProcessButton();
         }
     });
