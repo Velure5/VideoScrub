@@ -69,7 +69,7 @@
 <body>
 <div class="container">
     <h1>TikTok Unique-Fi</h1>
-    <p class="subtitle">Stronger transforms, higher quality export, and a local duplicate-risk scan before you upload.</p>
+    <p class="subtitle">TikTok upload mode — crisp HD export, QR-safe processing, and duplicate bypass without grainy destruction.</p>
 
     <div class="upload-zone" id="dropZone">
         <div class="upload-icon">🎬</div>
@@ -78,30 +78,33 @@
     </div>
 
     <div class="tweak-panel">
-        <h3>Transform strength</h3>
+        <h3>TikTok upload preset</h3>
         <div class="field-row">
             <div class="field">
-                <label for="strengthSelect">Intensity</label>
+                <label for="strengthSelect">Mode</label>
                 <select id="strengthSelect">
-                    <option value="standard">Standard</option>
-                    <option value="strong">Strong</option>
-                    <option value="maximum" selected>Maximum (recommended)</option>
+                    <option value="tiktok" selected>TikTok Upload (recommended)</option>
+                    <option value="strong">Strong fingerprint break</option>
+                    <option value="maximum">Maximum (visible changes)</option>
                 </select>
             </div>
             <div class="field">
-                <label for="qualitySelect">Export quality</label>
+                <label for="qualitySelect">Video quality</label>
                 <select id="qualitySelect">
-                    <option value="high" selected>High (CRF 18)</option>
-                    <option value="balanced">Balanced (faster)</option>
+                    <option value="studio" selected>Studio (CRF 15, best)</option>
+                    <option value="high">High (CRF 17)</option>
+                    <option value="fast">Fast (CRF 20)</option>
                 </select>
             </div>
         </div>
         <div class="checkbox-group" style="margin-top:10px">
-            <label class="checkbox-label"><input type="checkbox" id="applyVisual" checked> Aggressive visual rewrite</label>
-            <label class="checkbox-label"><input type="checkbox" id="applyTiming" checked> Speed / FPS shift</label>
+            <label class="checkbox-label"><input type="checkbox" id="upscale1080" checked> Upscale to TikTok-friendly 1080×1920 canvas</label>
+            <label class="checkbox-label"><input type="checkbox" id="qrSoftening" checked> Disrupt QR / barcode patterns</label>
+            <label class="checkbox-label"><input type="checkbox" id="applyTiming" checked> Subtle timing shift</label>
             <label class="checkbox-label"><input type="checkbox" id="stripAudio" checked disabled> Strip audio (add music in TikTok)</label>
+            <label class="checkbox-label"><input type="checkbox" id="applyFlip"> Mirror video (breaks text &amp; QR readability)</label>
         </div>
-        <p class="hint">Exports are silent MP4s — add your song in TikTok. Maximum rewrites ~10–15% of pixels, mirrors, and reframes for higher uniqueness scores.</p>
+        <p class="hint">Targets TikTok flags: low quality, unoriginal, QR code. Uses sharpen + high bitrate instead of grain. Add your own music when posting.</p>
     </div>
 
     <div class="btn-row">
@@ -124,7 +127,7 @@
         </div>
         <ul class="metric-list" id="metricList"></ul>
         <div class="checker-advice" id="checkerAdvice"></div>
-        <button id="retryMaxBtn" class="btn-retry">Re-transform with Maximum strength</button>
+        <button id="retryMaxBtn" class="btn-retry">Re-run with TikTok Upload preset</button>
     </div>
 
     <div class="download-box" id="downloadBox">
@@ -144,7 +147,7 @@
     let outputObjectUrl = null;
     let ffmpegReady = false;
     let lastFfmpegLogs = [];
-    let lastStrength = 'maximum';
+    let lastStrength = 'tiktok';
     let lastAudioStripped = true;
 
     const $ = (id) => document.getElementById(id);
@@ -168,57 +171,111 @@
     }
 
     function getEncodeSettings() {
-        const high = $('qualitySelect').value === 'high';
-        return high
-            ? { crf: '18', preset: 'fast', audioBitrate: '192k', sampleRate: '48000' }
-            : { crf: '20', preset: 'fast', audioBitrate: '160k', sampleRate: '44100' };
+        const q = $('qualitySelect').value;
+        if (q === 'studio') {
+            return { crf: '15', preset: 'fast', maxrate: '12M', bufsize: '24M' };
+        }
+        if (q === 'high') {
+            return { crf: '17', preset: 'fast', maxrate: '8M', bufsize: '16M' };
+        }
+        return { crf: '20', preset: 'fast', maxrate: '5M', bufsize: '10M' };
     }
 
     function buildTransformProfile(strength) {
         const sign = () => (Math.random() > 0.5 ? 1 : -1);
+        const flip = $('applyFlip').checked;
         const tiers = {
-            standard: { scale: 1.08, cropW: 0.92, cropH: 0.92, pad: 16, hue: 10, speed: 0.025, trim: 0.08, fps: 29.5, flip: false, vflip: false },
-            strong: { scale: 1.12, cropW: 0.86, cropH: 0.88, pad: 28, hue: 18, speed: 0.04, trim: 0.12, fps: 25, flip: true, vflip: false },
-            maximum: { scale: 1.16, cropW: 0.82, cropH: 0.84, pad: 40, hue: 28, speed: 0.055, trim: 0.18, fps: 24, flip: true, vflip: false },
+            tiktok: {
+                scale: 1.028, cropW: 0.965, cropH: 0.965, trim: 0.04, speed: 1.004, fps: 30,
+                flip, blurSigma: 0.45, unsharp: '7:7:0.85:7:7:0.0',
+                eq: { c: 1.03, s: 1.04, b: 0.01 }, hue: 2,
+            },
+            strong: {
+                scale: 1.06, cropW: 0.94, cropH: 0.94, trim: 0.08, speed: 1.012, fps: 30,
+                flip: flip || true, blurSigma: 0.6, unsharp: '5:5:1.0:5:5:0.0',
+                eq: { c: 1.06, s: 1.08, b: 0.02 }, hue: 6,
+            },
+            maximum: {
+                scale: 1.1, cropW: 0.9, cropH: 0.9, trim: 0.12, speed: 1.02, fps: 30,
+                flip: flip || true, blurSigma: 0.8, unsharp: '5:5:1.1:5:5:0.0',
+                eq: { c: 1.1, s: 1.12, b: 0.03 }, hue: 10,
+            },
         };
-        const t = tiers[strength] || tiers.maximum;
-        const cropX = (0.04 + Math.random() * 0.06).toFixed(4);
-        const cropY = (0.03 + Math.random() * 0.06).toFixed(4);
-        const sat = 1 + sign() * (0.06 + Math.random() * 0.1);
-        const contrast = 1 + sign() * (0.05 + Math.random() * 0.12);
-        const brightness = sign() * (0.03 + Math.random() * 0.05);
-        const gamma = (0.88 + Math.random() * 0.18).toFixed(3);
-        const speed = 1 + sign() * t.speed * (0.7 + Math.random() * 0.6);
-        const resJitter = (0.97 + Math.random() * 0.05).toFixed(4);
+        const t = tiers[strength] || tiers.tiktok;
+        const cropX = (0.015 + Math.random() * 0.02).toFixed(4);
+        const cropY = (0.015 + Math.random() * 0.02).toFixed(4);
+        const speed = t.speed + sign() * 0.002;
         return {
             scale: t.scale, cropW: t.cropW, cropH: t.cropH, cropX, cropY,
-            pad: t.pad, hue: t.hue * sign(), sat, contrast, brightness, gamma,
-            speed, trim: t.trim, fps: t.fps, flip: t.flip, vflip: t.vflip,
-            resJitter, strength,
+            trim: t.trim, speed, fps: t.fps, flip: t.flip,
+            blurSigma: t.blurSigma, unsharp: t.unsharp,
+            contrast: t.eq.c, sat: t.eq.s, brightness: t.eq.b, hue: t.hue * sign(),
+            strength, upscale: $('upscale1080').checked, qrSoft: $('qrSoftening').checked,
         };
     }
 
-    function buildVideoFilters(profile, useVisual, useTiming) {
-        if (!useVisual) return [];
+    const TIKTOK_CANVAS = 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1';
+
+    function buildVideoFilters(profile, useTiming) {
         const f = [];
         if (profile.trim > 0) {
             f.push(`trim=start=${profile.trim.toFixed(3)}`, 'setpts=PTS-STARTPTS');
         }
         if (profile.flip) f.push('hflip');
-        if (profile.vflip) f.push('vflip');
-        if (profile.pad > 0) {
-            const p = profile.pad;
-            f.push(`pad=iw+${p * 2}:ih+${p * 2}:${p}:${p}:black`);
-        }
-        f.push(`scale=iw*${profile.scale}:ih*${profile.scale}`);
+        f.push(`scale=iw*${profile.scale}:ih*${profile.scale}:flags=lanczos`);
         f.push(`crop=iw*${profile.cropW}:ih*${profile.cropH}:iw*${profile.cropX}:ih*${profile.cropY}`);
-        f.push(`eq=contrast=${profile.contrast.toFixed(3)}:saturation=${profile.sat.toFixed(3)}:brightness=${profile.brightness.toFixed(3)}:gamma=${profile.gamma}`);
-        f.push(`hue=h=${profile.hue.toFixed(1)}:s=1.08`);
-        f.push(`scale=iw*${profile.resJitter}:ih*${profile.resJitter}`);
-        if (useTiming && profile.fps) f.push(`fps=${profile.fps}`);
-        if (useTiming) f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
+        f.push(`eq=contrast=${profile.contrast}:saturation=${profile.sat}:brightness=${profile.brightness}`);
+        if (Math.abs(profile.hue) > 0.5) f.push(`hue=h=${profile.hue.toFixed(1)}`);
+        if (profile.qrSoft && profile.blurSigma > 0) {
+            f.push(`gblur=sigma=${profile.blurSigma}`);
+        }
+        if (profile.unsharp) f.push(`unsharp=${profile.unsharp}`);
+        if (useTiming) {
+            f.push(`fps=${profile.fps}`);
+            f.push(`setpts=PTS/${profile.speed.toFixed(5)}`);
+        }
+        if (profile.upscale) f.push(TIKTOK_CANVAS);
         f.push(EVEN_SCALE);
         return f;
+    }
+
+    function encodeArgsTail(enc) {
+        return [
+            '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset,
+            '-maxrate', enc.maxrate, '-bufsize', enc.bufsize,
+            '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2',
+            '-movflags', '+faststart', '-an', 'output.mp4',
+        ];
+    }
+
+    /** Heuristic: high-contrast edges in corners often = QR / barcode. */
+    async function scanQrLikelihood(videoUrl) {
+        const video = await loadVideoMeta(videoUrl);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const sz = 48;
+        canvas.width = canvas.height = sz;
+        const corners = [
+            { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 },
+        ];
+        let maxScore = 0;
+        const t = Math.min(video.duration * 0.35, video.duration - 0.1);
+        await new Promise((res) => { video.onseeked = res; video.currentTime = Math.max(0.05, t); });
+        for (const c of corners) {
+            const sx = Math.floor(c.x * (video.videoWidth - sz));
+            const sy = Math.floor(c.y * (video.videoHeight - sz));
+            ctx.drawImage(video, sx, sy, sz, sz, 0, 0, sz, sz);
+            const d = ctx.getImageData(0, 0, sz, sz).data;
+            let edges = 0;
+            for (let i = 0; i < d.length; i += 4) {
+                const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+                if (lum < 60 || lum > 200) edges++;
+            }
+            const score = (edges / (sz * sz)) * 100;
+            if (score > maxScore) maxScore = score;
+        }
+        video.src = '';
+        return Math.round(maxScore);
     }
 
     function buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters, includeAudio }) {
@@ -232,7 +289,8 @@
         if (audioFilters.length) args.push('-af', audioFilters.join(','));
         args.push(
             '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset,
-            '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.1',
+            '-maxrate', enc.maxrate, '-bufsize', enc.bufsize,
+            '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2',
             '-movflags', '+faststart',
         );
         if (includeAudio) {
@@ -406,28 +464,46 @@
         uniqueness += Math.min(58, visualDiffPct * 0.95);
         if (audioRemoved) uniqueness += 30;
         else if (audioSim != null) uniqueness += Math.min(12, (100 - audioSim) * 0.12);
-        if (strength === 'maximum') uniqueness += 10;
-        else if (strength === 'strong') uniqueness += 6;
-        else uniqueness += 3;
+        if (strength === 'tiktok') uniqueness += 8;
+        else if (strength === 'maximum') uniqueness += 6;
+        else if (strength === 'strong') uniqueness += 4;
         uniqueness = Math.round(Math.min(100, Math.max(0, uniqueness)));
+
+        let qrOrig = 0;
+        let qrOut = 0;
+        try {
+            [qrOrig, qrOut] = await Promise.all([
+                scanQrLikelihood(originalUrl),
+                scanQrLikelihood(outputUrl),
+            ]);
+        } catch (_) { /* scan optional */ }
+
+        const qrRisk = qrOut >= 55;
+        const qrImproved = qrOrig >= 55 && qrOut < qrOrig - 10;
 
         let risk = 'high';
         let riskClass = 'risk-high';
-        if (uniqueness >= 72) { risk = 'low'; riskClass = 'risk-low'; }
-        else if (uniqueness >= 50) { risk = 'medium'; riskClass = 'risk-med'; }
+        if (uniqueness >= 65 && !qrRisk) { risk = 'low'; riskClass = 'risk-low'; }
+        else if (uniqueness >= 45) { risk = 'medium'; riskClass = 'risk-med'; }
 
-        let advice;
-        if (uniqueness >= 72) {
-            advice = 'Looks sufficiently different for upload. Still add a unique caption, cover, and optional 1–2s intro you filmed yourself.';
-        } else if (uniqueness >= 50) {
-            advice = 'Borderline — TikTok may still match visual or audio fingerprints. Re-run with Maximum intensity + High quality, or edit more in CapCut (crop, text, voiceover).';
-        } else {
-            advice = 'High duplicate risk — transform more before uploading. Use Maximum strength, enable all layers, then scan again.';
+        const tips = [];
+        if (qrRisk) {
+            tips.push('QR/barcode pattern still detected — cover QR areas with stickers/text in CapCut, or crop them out before processing.');
+        } else if (qrImproved) {
+            tips.push('QR-style corner pattern was softened.');
         }
+        if (visualDiffPct < 20 && strength !== 'maximum') {
+            tips.push('Try Strong mode if TikTok still flags as unoriginal.');
+        }
+        tips.push('Use Studio quality. Add music, a unique caption, and a custom cover in TikTok — not in this file.');
+        tips.push('Film a 1–2 second intro on your phone and prepend in CapCut for best unoriginal bypass.');
+
+        let advice = tips.join(' ');
 
         return {
             uniqueness, risk, riskClass, advice, fileHashChanged, visualSim, visualDiffPct,
-            audioSim, audioRemoved, origHash: origHash.slice(0, 12), outHash: outHash.slice(0, 12),
+            audioSim, audioRemoved, qrOrig, qrOut, qrRisk,
+            origHash: origHash.slice(0, 12), outHash: outHash.slice(0, 12),
         };
     }
 
@@ -440,13 +516,13 @@
         badge.className = `risk-badge ${report.riskClass}`;
         $('metricList').innerHTML = `
             <li><span>File hash</span><span class="metric-val">${report.fileHashChanged ? 'Changed ✓' : 'Unchanged ✗'}</span></li>
-            <li><span>Pixel fingerprint shift</span><span class="metric-val">${report.visualDiffPct.toFixed(1)}% (higher is better)</span></li>
-            <li><span>Visual similarity</span><span class="metric-val">${report.visualSim.toFixed(1)}% (lower is better)</span></li>
-            <li><span>Audio</span><span class="metric-val">${report.audioRemoved ? 'Removed ✓' : (report.audioSim != null ? report.audioSim.toFixed(1) + '% match' : 'N/A')}</span></li>
-            <li><span>Strength</span><span class="metric-val">${lastStrength}</span></li>
+            <li><span>Pixel shift</span><span class="metric-val">${report.visualDiffPct.toFixed(1)}%</span></li>
+            <li><span>QR corner signal</span><span class="metric-val">${report.qrOut ?? '—'}% ${report.qrRisk ? '⚠ still high' : '✓'}</span></li>
+            <li><span>Audio</span><span class="metric-val">${report.audioRemoved ? 'Stripped ✓' : 'Present'}</span></li>
+            <li><span>Mode</span><span class="metric-val">${lastStrength}</span></li>
         `;
         $('checkerAdvice').textContent = report.advice;
-        $('retryMaxBtn').style.display = report.uniqueness < 72 ? 'block' : 'none';
+        $('retryMaxBtn').style.display = (report.uniqueness < 65 || report.qrRisk) ? 'block' : 'none';
     }
 
     async function processVideo(forceStrength) {
@@ -454,7 +530,6 @@
         lastStrength = strength;
         lastAudioStripped = true;
         const profile = buildTransformProfile(strength);
-        const useVisual = $('applyVisual').checked;
         const useTiming = $('applyTiming').checked;
         const ext = (selectedFile.name.split('.').pop() || 'mp4').toLowerCase();
         const inputName = `input.${ext}`;
@@ -462,43 +537,43 @@
         await cleanupFiles(inputName, 'output.mp4');
         await ffmpeg.writeFile(inputName, new Uint8Array(await selectedFile.arrayBuffer()));
 
-        const videoFilters = buildVideoFilters(profile, useVisual, useTiming);
-        const videoNoHue = videoFilters.filter((f) => !f.startsWith('hue='));
-        const videoNoTrim = videoNoHue.filter((f) => !f.startsWith('trim=') && f !== 'setpts=PTS-STARTPTS');
-        const videoNoTiming = videoNoTrim.filter((f) => !f.startsWith('setpts=') && !f.startsWith('fps='));
+        const videoFilters = buildVideoFilters(profile, useTiming);
+        const noBlur = videoFilters.filter((f) => !f.startsWith('gblur='));
+        const noCanvas = noBlur.filter((f) => !f.includes('1080:1920'));
         const enc = getEncodeSettings();
 
         const attempts = [
             {
-                label: 'aggressive',
+                label: 'tiktok-hd',
                 args: buildFfmpegArgs(inputName, profile, { videoFilters, audioFilters: [], includeAudio: false }),
             },
             {
-                label: 'no-hue',
-                args: buildFfmpegArgs(inputName, profile, { videoFilters: videoNoHue, audioFilters: [], includeAudio: false }),
+                label: 'no-blur',
+                args: buildFfmpegArgs(inputName, profile, { videoFilters: noBlur, audioFilters: [], includeAudio: false }),
             },
             {
-                label: 'no-trim',
-                args: buildFfmpegArgs(inputName, profile, { videoFilters: videoNoTrim, audioFilters: [], includeAudio: false }),
+                label: 'no-canvas',
+                args: buildFfmpegArgs(inputName, profile, { videoFilters: noCanvas, audioFilters: [], includeAudio: false }),
             },
             {
-                label: 'no-timing',
-                args: buildFfmpegArgs(inputName, profile, { videoFilters: videoNoTiming, audioFilters: [], includeAudio: false }),
-            },
-            {
-                label: 'mirror+crop',
+                label: 'clean-hd',
                 args: ['-i', inputName, '-map_metadata', '-1',
-                    '-vf', `hflip,scale=iw*1.1:ih*1.1,crop=iw*0.88:ih*0.88:iw*0.06:ih*0.04,eq=contrast=1.08:saturation=1.1,${EVEN_SCALE}`,
-                    '-c:v', 'libx264', '-crf', enc.crf, '-preset', enc.preset, '-pix_fmt', 'yuv420p',
-                    '-movflags', '+faststart', '-an', 'output.mp4'],
+                    '-vf', `scale=iw*1.025:ih*1.025:flags=lanczos,crop=iw*0.97:ih*0.97:iw*0.015:ih*0.015,eq=contrast=1.03:saturation=1.04,unsharp=7:7:0.85:7:7:0,fps=30,${TIKTOK_CANVAS},${EVEN_SCALE}`,
+                    ...encodeArgsTail(enc)],
+            },
+            {
+                label: 'minimal',
+                args: ['-i', inputName, '-map_metadata', '-1',
+                    '-vf', `scale=iw*1.02:ih*1.02:flags=lanczos,crop=iw*0.98:ih*0.98:iw*0.01:ih*0.01,unsharp=5:5:0.6:5:5:0,${EVEN_SCALE}`,
+                    ...encodeArgsTail(enc)],
             },
         ];
 
         let lastErr = null;
         for (const attempt of attempts) {
             try {
-                $('statusText').innerText = attempt.label === 'aggressive'
-                    ? `Transforming (${strength}, silent export)…`
+                $('statusText').innerText = attempt.label === 'tiktok-hd'
+                    ? `TikTok HD export (${strength})…`
                     : `Retrying (${attempt.label})…`;
                 await runFfmpeg(attempt.args);
                 lastErr = null;
@@ -587,9 +662,12 @@
     });
 
     $('retryMaxBtn').addEventListener('click', () => {
-        $('strengthSelect').value = 'maximum';
-        $('applyVisual').checked = true;
+        $('strengthSelect').value = 'tiktok';
+        $('qualitySelect').value = 'studio';
+        $('upscale1080').checked = true;
+        $('qrSoftening').checked = true;
         $('applyTiming').checked = true;
+        $('applyFlip').checked = false;
         $('processBtn').click();
     });
 
